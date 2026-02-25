@@ -141,7 +141,7 @@ const SurveyPreview = () => {
       const parentAnswer = answers[question.sourceQuestion];
       return isChildTriggered(parent, parentAnswer, question.questionId);
     });
-  }, [questions, answers, effectiveLanguage]);
+  }, [questions, answers, effectiveLanguage, isChildTriggered]);
 
   useEffect(() => {
     if (currentQuestionIndex >= visibleQuestions.length && visibleQuestions.length > 0) {
