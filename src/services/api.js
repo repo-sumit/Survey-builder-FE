@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'https://survey-builder-be.onrender.com';
 
 // Survey API calls
 export const surveyAPI = {
