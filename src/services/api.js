@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://survey-builder-be.onrender.com';
+// Use environment variable for API URL, fallback to hardcoded for dev
+// In production (React build), set REACT_APP_API_URL in your hosting environment
+// Example: REACT_APP_API_URL=https://survey-builder-be.onrender.com/api
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://survey-builder-be.onrender.com/api';
 
 // Survey API calls
 export const surveyAPI = {
@@ -111,6 +114,24 @@ export const exportAPI = {
   }
 };
 
+// Import API call
+export const importAPI = {
+  // Import survey from XLSX/CSV file
+  importFile: async (file, overwrite = false) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const url = overwrite
+      ? `${API_BASE_URL}/import?overwrite=true`
+      : `${API_BASE_URL}/import`;
+
+    const response = await axios.post(url, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  }
+};
+
 // Validation API calls
 export const validationAPI = {
   // Validate uploaded file
@@ -128,6 +149,14 @@ export const validationAPI = {
   // Get validation schema
   getSchema: async () => {
     const response = await axios.get(`${API_BASE_URL}/validation-schema`);
+    return response.data;
+  }
+};
+
+// Translation API calls
+export const translateAPI = {
+  translate: async (text, target, source = 'en') => {
+    const response = await axios.post(`${API_BASE_URL}/translate`, { text, target, source });
     return response.data;
   }
 };
