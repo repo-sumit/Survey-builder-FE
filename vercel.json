@@ -2,7 +2,8 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://YOUR_RENDER_APP.onrender.com/api/:path*"
+      "destination": ""destination": "https://fmb-survey-builder-api.onrender.com/api/:path*"
+"
     },
     {
       "source": "/(.*)",
