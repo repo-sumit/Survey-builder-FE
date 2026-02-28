@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { importAPI } from '../services/api';
+import axios from 'axios';
 
 const ImportSurvey = () => {
   const navigate = useNavigate();
@@ -36,14 +36,22 @@ const ImportSurvey = () => {
       setErrors(null);
       setResult(null);
 
-      const response = await importAPI.importFile(file, overwrite);
+      const formData = new FormData();
+      formData.append('file', file);
 
-      setResult(response);
-      alert(`Import successful! ${response.surveysImported} survey(s) and ${response.questionsImported} question(s) imported.`);
+      const importUrl = overwrite ? '/api/import?overwrite=true' : '/api/import';
+      const response = await axios.post(importUrl, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setResult(response.data);
+      alert(`Import successful! ${response.data.surveysImported} survey(s) and ${response.data.questionsImported} question(s) imported.`);
       
       // Navigate to the first imported survey if available
-      if (response.surveys && response.surveys.length > 0) {
-        const firstSurvey = response.surveys[0];
+      if (response.data.surveys && response.data.surveys.length > 0) {
+        const firstSurvey = response.data.surveys[0];
         setTimeout(() => {
           navigate(`/surveys/${firstSurvey.surveyId}/questions`);
         }, 1000);
@@ -54,7 +62,7 @@ const ImportSurvey = () => {
       if (err.response?.data?.validationErrors) {
         setErrors(err.response.data);
       } else {
-        const errorMessage = err.response?.data?.error || err.response?.data?.message || 'Failed to import file';
+        const errorMessage = err.response?.data?.error || 'Failed to import file';
         alert(errorMessage);
       }
     } finally {
@@ -127,7 +135,7 @@ const ImportSurvey = () => {
 
         {result && (
           <div className="import-success">
-            <h3>&#x2713; Import Successful</h3>
+            <h3>✓ Import Successful</h3>
             <p>Surveys imported: {result.surveysImported}</p>
             <p>Questions imported: {result.questionsImported}</p>
           </div>

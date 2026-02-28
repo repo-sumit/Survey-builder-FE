@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { surveyAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import DuplicateSurveyModal from './DuplicateSurveyModal';
 
 const SurveyList = () => {
@@ -9,6 +10,9 @@ const SurveyList = () => {
   const [error, setError] = useState(null);
   const [duplicatingModal, setDuplicatingModal] = useState(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const isReadOnly = user?.role !== 'admin' && !user?.isActive;
 
   useEffect(() => {
     loadSurveys();
@@ -34,7 +38,8 @@ const SurveyList = () => {
         await surveyAPI.delete(surveyId);
         loadSurveys();
       } catch (err) {
-        alert('Failed to delete survey');
+        const msg = err.response?.data?.error || 'Failed to delete survey';
+        alert(msg);
         console.error(err);
       }
     }
@@ -55,6 +60,10 @@ const SurveyList = () => {
       alert(errorMessage);
       console.error(err);
     }
+  };
+
+  const isPublished = (survey) => {
+    return survey.publish?.status === 'PUBLISHED';
   };
 
   if (loading) {
@@ -90,18 +99,22 @@ const SurveyList = () => {
       <div className="list-header">
         <h2>Surveys</h2>
         <div className="header-actions">
-          <button 
-            className="btn btn-secondary"
-            onClick={() => navigate('/import')}
-          >
-            📥 Import Survey
-          </button>
-          <button 
-            className="btn btn-primary"
-            onClick={() => navigate('/surveys/new')}
-          >
-            ✚ Create New Survey
-          </button>
+          {!isReadOnly && (
+            <>
+              <button
+                className="btn btn-secondary"
+                onClick={() => navigate('/import')}
+              >
+                Import Survey
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate('/surveys/new')}
+              >
+                + Create New Survey
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -110,12 +123,14 @@ const SurveyList = () => {
       {surveys.length === 0 ? (
         <div className="empty-state">
           <p>No surveys found. Create your first survey to get started.</p>
-          <button 
-            className="btn btn-primary"
-            onClick={() => navigate('/surveys/new')}
-          >
-            Create New Survey
-          </button>
+          {!isReadOnly && (
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate('/surveys/new')}
+            >
+              Create New Survey
+            </button>
+          )}
         </div>
       ) : (
         <div className="survey-grid">
@@ -130,44 +145,56 @@ const SurveyList = () => {
                 <span className="badge">{survey.isActive === 'Yes' ? 'Active' : 'Inactive'}</span>
                 <span className="badge">{survey.public === 'Yes' ? 'Public' : 'Private'}</span>
                 {survey.mode && <span className="badge badge-mode">{survey.mode}</span>}
+                {isPublished(survey) && <span className="badge badge-published">Published</span>}
+                {survey.stateCode && <span className="badge badge-state">{survey.stateCode}</span>}
               </div>
               <div className="survey-actions">
-                <button 
+                <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => navigate(`/surveys/${survey.surveyId}/questions`)}
+                  title="Question Master"
                 >
-                  Questions
+                  Question Master
                 </button>
-                <button 
+                <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => navigate(`/surveys/${survey.surveyId}/preview`)}
+                  title="Preview"
                 >
                   Preview
                 </button>
-                <button 
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => handleDuplicate(survey)}
-                >
-                  Duplicate
-                </button>
-                <button 
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => navigate(`/surveys/${survey.surveyId}/edit`)}
-                >
-                  Edit
-                </button>
-                <button 
-                  className="btn btn-danger btn-sm"
-                  onClick={() => handleDelete(survey.surveyId)}
-                >
-                  Delete
-                </button>
+                {!isReadOnly && (
+                  <>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleDuplicate(survey)}
+                      title="Duplicate"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => navigate(`/surveys/${survey.surveyId}/edit`)}
+                      title="Edit"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleDelete(survey.surveyId)}
+                      disabled={isPublished(survey)}
+                      title={isPublished(survey) ? 'Cannot delete a published survey' : 'Delete'}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
-      
+
       {duplicatingModal && (
         <DuplicateSurveyModal
           survey={duplicatingModal}

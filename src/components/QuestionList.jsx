@@ -1,20 +1,66 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { surveyAPI, questionAPI, exportAPI } from '../services/api';
+import { surveyAPI, questionAPI, exportAPI, publishAPI, lockAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+
+const FEATURE_PUBLISH = (typeof process !== 'undefined' && process.env?.REACT_APP_FEATURE_PUBLISH === 'true') ||
+  (typeof window !== 'undefined' && window.__ENV__?.FEATURE_PUBLISH === 'true');
 
 const QuestionList = () => {
   const { surveyId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [survey, setSurvey] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [lockInfo, setLockInfo] = useState(null);
+  const questionListRef = useRef(null);
+
+  const isReadOnly = user?.role !== 'admin' && !user?.isActive;
+  const isPublished = survey?.publish?.status === 'PUBLISHED';
 
   useEffect(() => {
     loadData();
+    acquireLock();
+
+    // Release lock when leaving the page
+    return () => {
+      lockAPI.release(surveyId).catch(() => {});
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surveyId]);
+
+  // Scroll restore after navigating back from create/edit
+  useEffect(() => {
+    const lastEditedId = sessionStorage.getItem('lastEditedQuestionId');
+    if (lastEditedId && questions.length > 0) {
+      sessionStorage.removeItem('lastEditedQuestionId');
+      // Small delay to allow DOM rendering
+      setTimeout(() => {
+        const el = document.getElementById(`question-${lastEditedId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('question-highlight');
+          setTimeout(() => el.classList.remove('question-highlight'), 2000);
+        }
+      }, 100);
+    }
+  }, [questions]);
+
+  const acquireLock = async () => {
+    try {
+      const result = await lockAPI.acquire(surveyId);
+      setLockInfo(result.lock || null);
+    } catch (err) {
+      // Lock couldn't be acquired — someone else has it
+      if (err.response?.status === 409) {
+        setLockInfo(err.response.data.lock || { locked: true });
+      }
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -40,7 +86,8 @@ const QuestionList = () => {
         await questionAPI.delete(surveyId, questionId);
         loadData();
       } catch (err) {
-        alert('Failed to delete question');
+        const msg = err.response?.data?.error || 'Failed to delete question';
+        alert(msg);
         console.error(err);
       }
     }
@@ -74,7 +121,6 @@ const QuestionList = () => {
       const duplicatedQuestion = await questionAPI.duplicate(surveyId, questionId, normalizedQuestionId);
       loadData();
       alert(`Question duplicated successfully as ${duplicatedQuestion.questionId}`);
-      // Navigate to edit the duplicated question
       navigate(`/surveys/${surveyId}/questions/${duplicatedQuestion.questionId}/edit`);
     } catch (err) {
       const errorMessage = err.response?.data?.error || 'Failed to duplicate question';
@@ -93,6 +139,36 @@ const QuestionList = () => {
       console.error(err);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!window.confirm('Are you sure you want to publish this survey? This will lock it from further edits.')) return;
+    try {
+      setPublishing(true);
+      await publishAPI.publish(surveyId);
+      await loadData();
+      alert('Survey published successfully');
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to publish survey';
+      alert(msg);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!window.confirm('Are you sure you want to unpublish this survey?')) return;
+    try {
+      setPublishing(true);
+      await publishAPI.unpublish(surveyId);
+      await loadData();
+      alert('Survey unpublished successfully');
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to unpublish survey';
+      alert(msg);
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -131,40 +207,70 @@ const QuestionList = () => {
     return 0;
   });
 
+  // Check if another user holds the lock
+  const lockedByOther = lockInfo?.locked && lockInfo?.lockedBy && lockInfo.lockedBy !== user?.id;
+
   return (
     <div className="question-list-container">
       <div className="list-header">
         <div>
           <h2>Question Master</h2>
           <p className="survey-id-display">Survey: {survey.surveyName} (ID: {survey.surveyId})</p>
+          {isPublished && <span className="badge badge-published">Published</span>}
+          {lockedByOther && (
+            <div className="lock-warning">
+              Another user is editing this survey. Changes are restricted.
+            </div>
+          )}
         </div>
         <div className="header-actions">
-          <button 
+          <button
             className="btn btn-secondary"
             onClick={() => navigate('/')}
           >
             Back to Surveys
           </button>
-          <button 
+          <button
             className="btn btn-secondary"
             onClick={() => navigate(`/surveys/${surveyId}/preview`)}
             disabled={questions.length === 0}
           >
             Preview Survey
           </button>
-          <button 
+          <button
             className="btn btn-success"
             onClick={handleExport}
             disabled={exporting}
           >
             {exporting ? 'Exporting...' : 'Export to Excel'}
           </button>
-          <button 
-            className="btn btn-primary"
-            onClick={() => navigate(`/surveys/${surveyId}/questions/new`)}
-          >
-            Add Question
-          </button>
+          {FEATURE_PUBLISH && !isReadOnly && (
+            isPublished ? (
+              <button
+                className="btn btn-warning"
+                onClick={handleUnpublish}
+                disabled={publishing}
+              >
+                {publishing ? 'Updating...' : 'Unpublish'}
+              </button>
+            ) : (
+              <button
+                className="btn btn-publish"
+                onClick={handlePublish}
+                disabled={publishing || questions.length === 0}
+              >
+                {publishing ? 'Publishing...' : 'Publish'}
+              </button>
+            )
+          )}
+          {!isReadOnly && !isPublished && (
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate(`/surveys/${surveyId}/questions/new`)}
+            >
+              Add Question
+            </button>
+          )}
         </div>
       </div>
 
@@ -175,10 +281,11 @@ const QuestionList = () => {
           <p>No questions added yet. Click "Add Question" to get started.</p>
         </div>
       ) : (
-        <div className="question-list">
+        <div className="question-list" ref={questionListRef}>
           {sortedQuestions.map(question => (
-            <div 
-              key={question.questionId} 
+            <div
+              key={question.questionId}
+              id={`question-${question.questionId}`}
               className={`question-card ${getQuestionDepth(question.questionId) > 0 ? 'child-question' : ''}`}
               style={{ '--question-depth': getQuestionDepth(question.questionId) }}
             >
@@ -191,29 +298,41 @@ const QuestionList = () => {
                   )}
                 </div>
                 <div className="question-actions">
-                  <button 
-                    className="btn btn-sm btn-secondary"
-                    onClick={() => navigate(`/surveys/${surveyId}/questions/${question.questionId}/edit`)}
-                  >
-                    Edit
-                  </button>
-                  <button 
-                    className="btn btn-sm btn-secondary"
-                    onClick={() => handleDuplicate(question.questionId)}
-                  >
-                    Duplicate
-                  </button>
-                  <button 
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDelete(question.questionId)}
-                  >
-                    Delete
-                  </button>
+                  {!isReadOnly && !isPublished && (
+                    <>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => navigate(`/surveys/${surveyId}/questions/${question.questionId}/edit`)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleDuplicate(question.questionId)}
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDelete(question.questionId)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                  {(isReadOnly || isPublished) && (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => navigate(`/surveys/${surveyId}/questions/${question.questionId}/edit`)}
+                    >
+                      View
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="question-body">
                 <p className="question-text">{question.questionDescription}</p>
-                {question.questionDescriptionInEnglish && 
+                {question.questionDescriptionInEnglish &&
                  question.questionDescriptionInEnglish !== question.questionDescription && (
                   <p className="question-text-english">
                     <em>(English: {question.questionDescriptionInEnglish})</em>
@@ -226,7 +345,7 @@ const QuestionList = () => {
                       {question.options.map((opt, idx) => (
                         <li key={idx}>
                           {opt.text}
-                          {opt.children && <span className="option-children"> → {opt.children}</span>}
+                          {opt.children && <span className="option-children"> &rarr; {opt.children}</span>}
                         </li>
                       ))}
                     </ul>

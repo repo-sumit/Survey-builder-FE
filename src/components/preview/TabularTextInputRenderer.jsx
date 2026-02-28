@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
+{}
 const TabularTextInputRenderer = ({ question, language, onAnswer }) => {
   const translations = question.translations?.[language] || {};
   const tableHeaderValue = translations.tableHeaderValue || question.tableHeaderValue || '';
@@ -25,7 +25,7 @@ const TabularTextInputRenderer = ({ question, language, onAnswer }) => {
 
   useEffect(() => {
     setResponses(tableQuestions.map(() => ''));
-  }, [question.questionId, tableQuestionValue]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [question.questionId, tableQuestionValue]);
 
   const handleChange = (index, value) => {
     setResponses(prev => {

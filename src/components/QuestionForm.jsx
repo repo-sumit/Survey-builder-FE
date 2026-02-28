@@ -397,9 +397,13 @@ const QuestionForm = () => {
       setLoading(true);
       if (isEdit) {
         await questionAPI.update(surveyId, questionId, payload);
+        // Store the edited question ID for scroll restore
+        sessionStorage.setItem('lastEditedQuestionId', questionId);
         alert('✓ Question updated successfully');
       } else {
         await questionAPI.create(surveyId, payload);
+        // Store the newly created question ID for scroll restore
+        sessionStorage.setItem('lastEditedQuestionId', payload.questionId);
         alert('✓ Question added successfully! You can add more questions or preview the survey.');
       }
       navigate(`/surveys/${surveyId}/questions`);
