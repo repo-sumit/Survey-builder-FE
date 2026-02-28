@@ -1,4 +1,4 @@
-# Survey Builder Frontend (Survey-builder-FE)
+# Survey Builder Frontend
 
 React-based admin UI for creating, editing, previewing, importing, and exporting surveys.  
 This frontend is designed to work with the **Survey Builder Backend** hosted separately at: `repo-sumit/Survey-builder-BE`.
