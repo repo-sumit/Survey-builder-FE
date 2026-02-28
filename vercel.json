@@ -3,7 +3,6 @@
     {
       "source": "/api/:path*",
       "destination": ""destination": "https://fmb-survey-builder-api.onrender.com/api/:path*"
-"
     },
     {
       "source": "/(.*)",
