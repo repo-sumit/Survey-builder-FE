@@ -10,6 +10,7 @@ import QuestionList from './components/QuestionList';
 import QuestionForm from './components/QuestionForm';
 import SurveyPreview from './components/preview/SurveyPreview';
 import ImportSurvey from './components/ImportSurvey';
+import UploadValidator from './components/UploadValidator';
 import AdminPanel from './components/AdminPanel';
 import './App.css';
 
@@ -38,6 +39,7 @@ function App() {
                       <Route path="/surveys/:surveyId/questions/:questionId/edit" element={<QuestionForm />} />
                       <Route path="/surveys/:surveyId/preview" element={<SurveyPreview />} />
                       <Route path="/import" element={<ImportSurvey />} />
+                      <Route path="/validate-upload" element={<UploadValidator />} />
                       <Route
                         path="/admin"
                         element={

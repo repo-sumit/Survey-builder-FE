@@ -78,8 +78,8 @@ const AdminPanel = () => {
     setEditForm({
       password: '',
       role: user.role,
-      stateCode: user.state_code || '',
-      isActive: user.is_active
+      stateCode: user.stateCode || '',
+      isActive: user.isActive
     });
   };
 
@@ -263,8 +263,8 @@ const AdminPanel = () => {
                     <td>{user.id}</td>
                     <td>{user.username}</td>
                     <td><span className={`badge ${user.role === 'admin' ? 'badge-admin' : 'badge-state'}`}>{user.role}</span></td>
-                    <td>{user.state_code || <span className="text-muted">N/A</span>}</td>
-                    <td><span className={`badge ${user.is_active ? 'badge-active' : 'badge-inactive'}`}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
+                    <td>{user.stateCode || <span className="text-muted">N/A</span>}</td>
+                    <td><span className={`badge ${user.isActive ? 'badge-active' : 'badge-inactive'}`}>{user.isActive ? 'Active' : 'Inactive'}</span></td>
                     <td>
                       <button className="btn btn-secondary btn-sm" onClick={() => startEdit(user)}>Edit</button>
                     </td>
