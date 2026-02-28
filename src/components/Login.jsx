@@ -34,8 +34,9 @@ const Login = () => {
   return (
     <div className="login-container">
       <div className="login-card">
+        <div className="login-logo">F</div>
         <h1>FMB Survey Builder</h1>
-        <h2>Sign In</h2>
+        <h2>Sign in to continue</h2>
         <form onSubmit={handleSubmit}>
           {error && <div className="error-message">{error}</div>}
           <div className="form-group">
@@ -45,7 +46,7 @@ const Login = () => {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
+              placeholder="Enter your username"
               autoFocus
               disabled={loading}
             />
@@ -57,12 +58,17 @@ const Login = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
+              placeholder="Enter your password"
               disabled={loading}
             />
           </div>
-          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+          <button
+            type="submit"
+            className="btn btn-primary btn-full"
+            disabled={loading}
+            style={{ marginTop: '0.5rem' }}
+          >
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
       </div>

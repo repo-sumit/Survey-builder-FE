@@ -67,7 +67,21 @@ const SurveyList = () => {
   };
 
   if (loading) {
-    return <div className="loading">Loading surveys...</div>;
+    return (
+      <div className="survey-list-container">
+        <div className="skeleton skeleton-card" style={{ height: 100, marginBottom: '1.5rem' }} />
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} className="skeleton" style={{ height: 80, flex: 1, borderRadius: 16 }} />
+          ))}
+        </div>
+        <div className="survey-grid">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="skeleton skeleton-card" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const activeSurveys = surveys.filter(s => s.isActive === 'Yes').length;

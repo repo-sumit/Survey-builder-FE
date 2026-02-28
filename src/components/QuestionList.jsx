@@ -173,7 +173,16 @@ const QuestionList = () => {
   };
 
   if (loading) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <div className="question-list-container">
+        <div className="skeleton" style={{ height: 48, width: '60%', marginBottom: '1.5rem', borderRadius: 12 }} />
+        <div className="question-list">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="skeleton" style={{ height: 120, borderRadius: 20 }} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (!survey) {
