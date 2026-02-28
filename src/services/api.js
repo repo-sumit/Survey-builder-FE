@@ -171,6 +171,63 @@ export const exportAPI = {
   }
 };
 
+// --- Designation Mapping API ---
+
+export const designationAPI = {
+  getAll: async (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.stateCode)  q.set('stateCode',  params.stateCode);
+    if (params.activeOnly) q.set('activeOnly', 'true');
+    const qs = q.toString() ? `?${q}` : '';
+    const response = await axios.get(`${API_BASE_URL}/designations${qs}`);
+    return response.data;
+  },
+  create: async (data) => {
+    const response = await axios.post(`${API_BASE_URL}/designations`, data);
+    return response.data;
+  },
+  update: async (designationId, data) => {
+    const response = await axios.patch(`${API_BASE_URL}/designations/${designationId}`, data);
+    return response.data;
+  },
+  seedDefaults: async (stateCode) => {
+    const response = await axios.post(`${API_BASE_URL}/designations/seed-defaults`, { stateCode });
+    return response.data;
+  }
+};
+
+// --- Access Sheet API ---
+
+export const accessSheetAPI = {
+  dump: async (stateCode) => {
+    const response = await axios.post(`${API_BASE_URL}/access-sheet/dump`, stateCode ? { stateCode } : {});
+    return response.data;
+  },
+  getLatest: async (stateCode) => {
+    const qs = stateCode ? `?stateCode=${stateCode}` : '';
+    const response = await axios.get(`${API_BASE_URL}/access-sheet/latest${qs}`);
+    return response.data;
+  },
+  download: async (stateCode) => {
+    const qs = stateCode ? `?stateCode=${stateCode}` : '';
+    const response = await axios.get(`${API_BASE_URL}/access-sheet/latest/download${qs}`, {
+      responseType: 'blob'
+    });
+    const disposition = response.headers['content-disposition'] || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const fileName = match ? match[1] : `access_sheet_${stateCode || 'state'}.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    return true;
+  }
+};
+
 // --- Validation API calls ---
 
 export const validationAPI = {

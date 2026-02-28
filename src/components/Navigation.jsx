@@ -24,10 +24,16 @@ const Navigation = () => {
             Import
           </Link>
           <Link
-            to="/validate-upload"
-            className={location.pathname === '/validate-upload' ? 'nav-link active' : 'nav-link'}
+            to="/designations"
+            className={location.pathname === '/designations' ? 'nav-link active' : 'nav-link'}
           >
-            Validate Upload
+            Designation Mapping
+          </Link>
+          <Link
+            to="/access-sheet"
+            className={location.pathname === '/access-sheet' ? 'nav-link active' : 'nav-link'}
+          >
+            Access Sheet
           </Link>
           {user?.role === 'admin' && (
             <Link

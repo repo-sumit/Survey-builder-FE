@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { surveyAPI } from '../services/api';
+import { surveyAPI, designationAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
 import { AVAILABLE_MEDIUMS } from '../schemas/validationConstants';
 
@@ -34,20 +34,39 @@ const SurveyForm = () => {
 
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [hierarchyInput, setHierarchyInput] = useState('');
-  const [hierarchyLevels, setHierarchyLevels] = useState([]);
+  // Designation multi-select state
+  const [designations, setDesignations]           = useState([]);   // from API
+  const [selectedLevels, setSelectedLevels]       = useState([]);   // array of hierarchy_level strings
+  const [showHierarchyDropdown, setShowHierarchyDropdown] = useState(false);
+  const hierarchyDropdownRef = useRef(null);
+  // Medium dropdown state
   const [showMediumDropdown, setShowMediumDropdown] = useState(false);
   const mediumDropdownRef = useRef(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (mediumDropdownRef.current && !mediumDropdownRef.current.contains(event.target)) {
+      if (mediumDropdownRef.current && !mediumDropdownRef.current.contains(event.target))
         setShowMediumDropdown(false);
-      }
+      if (hierarchyDropdownRef.current && !hierarchyDropdownRef.current.contains(event.target))
+        setShowHierarchyDropdown(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Load designations from API (seed level 99 silently via GET)
+  useEffect(() => {
+    designationAPI.getAll({ activeOnly: true })
+      .then(data => {
+        setDesignations(data);
+        // Ensure level 99 exists; if not, trigger seed
+        const has99 = data.some(d => String(d.hierarchy_level) === '99');
+        if (!has99) {
+          designationAPI.seedDefaults().catch(() => {});
+        }
+      })
+      .catch(() => {}); // non-fatal
   }, []);
 
   useEffect(() => {
@@ -65,9 +84,9 @@ const SurveyForm = () => {
         data.availableMediums = data.availableMediums ? data.availableMediums.split(',') : [];
       }
       setFormData(data);
-      // Set hierarchy levels for display
+      // Restore selected hierarchy levels from saved comma-separated string
       if (data.hierarchicalAccessLevel) {
-        setHierarchyLevels(data.hierarchicalAccessLevel.split(',').filter(l => l.trim()));
+        setSelectedLevels(data.hierarchicalAccessLevel.split(',').map(l => l.trim()).filter(Boolean));
       }
     } catch (err) {
       alert('Failed to load survey');
@@ -193,31 +212,26 @@ const SurveyForm = () => {
     }
   };
 
-  const handleAddHierarchyLevel = () => {
-    if (hierarchyInput && /^\d+$/.test(hierarchyInput)) {
-      if (!hierarchyLevels.includes(hierarchyInput)) {
-        const newLevels = [...hierarchyLevels, hierarchyInput];
-        setHierarchyLevels(newLevels);
-        setFormData(prev => ({
-          ...prev,
-          hierarchicalAccessLevel: newLevels.join(',')
-        }));
-        setHierarchyInput('');
-      } else {
-        alert('This hierarchy level already exists');
-      }
-    } else {
-      alert('Please enter a valid numeric value');
-    }
+  // Toggle a hierarchy level in the multi-select
+  const toggleHierarchyLevel = (levelStr) => {
+    setSelectedLevels(prev => {
+      const next = prev.includes(levelStr)
+        ? prev.filter(l => l !== levelStr)
+        : [...prev, levelStr];
+      // Always keep level 99
+      if (!next.includes('99')) next.push('99');
+      setFormData(fd => ({ ...fd, hierarchicalAccessLevel: next.join(',') }));
+      return next;
+    });
   };
 
-  const handleRemoveHierarchyLevel = (level) => {
-    const newLevels = hierarchyLevels.filter(l => l !== level);
-    setHierarchyLevels(newLevels);
-    setFormData(prev => ({
-      ...prev,
-      hierarchicalAccessLevel: newLevels.join(',')
-    }));
+  const removeHierarchyLevel = (levelStr) => {
+    if (levelStr === '99') return; // cannot remove 99
+    setSelectedLevels(prev => {
+      const next = prev.filter(l => l !== levelStr);
+      setFormData(fd => ({ ...fd, hierarchicalAccessLevel: next.join(',') }));
+      return next;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -255,12 +269,15 @@ const SurveyForm = () => {
 
     try {
       setLoading(true);
+      // Ensure level 99 is always included
+      const levelsToSave = [...new Set([...selectedLevels, '99'])];
       // Convert availableMediums array to comma-separated string for backend
       const dataToSend = {
         ...formData,
-        availableMediums: Array.isArray(formData.availableMediums) 
-          ? formData.availableMediums.join(',') 
-          : formData.availableMediums
+        availableMediums: Array.isArray(formData.availableMediums)
+          ? formData.availableMediums.join(',')
+          : formData.availableMediums,
+        hierarchicalAccessLevel: levelsToSave.join(',')
       };
       
       if (isEdit) {
@@ -440,57 +457,61 @@ const SurveyForm = () => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="hierarchicalAccessLevel">Hierarchical Access Level</label>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <label>Hierarchical Access Level</label>
+            <div className="medium-select-wrapper" ref={hierarchyDropdownRef}>
               <input
                 type="text"
-                value={hierarchyInput}
-                onChange={(e) => setHierarchyInput(e.target.value)}
-                placeholder="Enter numeric value (e.g., 12)"
-                style={{ flex: 1 }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddHierarchyLevel();
-                  }
-                }}
+                placeholder={designations.length === 0 ? 'Loading levels…' : 'Click to select hierarchy levels…'}
+                value=""
+                onClick={() => setShowHierarchyDropdown(v => !v)}
+                readOnly
+                style={{ cursor: 'pointer' }}
               />
-              <button 
-                type="button" 
-                className="btn btn-secondary"
-                onClick={handleAddHierarchyLevel}
-              >
-                Add Level
-              </button>
+              {showHierarchyDropdown && (
+                <div className="medium-dropdown">
+                  {designations.length === 0 && (
+                    <div className="medium-option" style={{ color: '#888', fontStyle: 'italic' }}>
+                      No designations found. Add them in Designation Mapping.
+                    </div>
+                  )}
+                  {designations.map(d => {
+                    const lvlStr = String(d.hierarchy_level);
+                    const isSelected = selectedLevels.includes(lvlStr);
+                    const isForced   = lvlStr === '99';
+                    return (
+                      <div
+                        key={`${d.state_code}-${d.designation_id}`}
+                        className={`medium-option ${isSelected ? 'selected' : ''}`}
+                        onClick={() => !isForced && toggleHierarchyLevel(lvlStr)}
+                        style={isForced ? { cursor: 'default', opacity: 0.7 } : {}}
+                      >
+                        {d.hierarchy_level} — {d.designation_name} ({d.medium_in_english})
+                        {isSelected && ' ✓'}
+                        {isForced && ' 🔒'}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-              {hierarchyLevels.map(level => (
-                <span key={level} style={{ 
-                  padding: '0.25rem 0.75rem', 
-                  backgroundColor: '#e0e0e0', 
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  {level}
-                  <button 
-                    type="button"
-                    onClick={() => handleRemoveHierarchyLevel(level)}
-                    style={{ 
-                      border: 'none', 
-                      background: 'none', 
-                      cursor: 'pointer',
-                      fontSize: '1.2rem',
-                      lineHeight: '1'
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
+            {/* Selected tags */}
+            <div className="medium-tags-container">
+              {selectedLevels.map(lvl => {
+                const d = designations.find(x => String(x.hierarchy_level) === lvl);
+                const label = d ? `${lvl} — ${d.designation_name}` : `Level ${lvl}`;
+                const isForced = lvl === '99';
+                return (
+                  <span key={lvl} className="medium-tag">
+                    {label}
+                    {!isForced && (
+                      <button type="button" onClick={() => removeHierarchyLevel(lvl)}>×</button>
+                    )}
+                    {isForced && <span style={{ marginLeft: '4px', fontSize: '0.75rem' }}>🔒</span>}
+                  </span>
+                );
+              })}
             </div>
-            <small>Numeric values only, no duplicates allowed</small>
+            <small>Level 99 (Test) is always included automatically.</small>
           </div>
         </div>
 
