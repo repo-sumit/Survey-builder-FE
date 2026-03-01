@@ -30,67 +30,48 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      <div className="card shadow-sm border-0" style={{ width: '100%', maxWidth: 400, borderRadius: 16 }}>
-        <div className="card-body p-4 p-sm-5">
-          {/* Logo */}
-          <div className="login-logo">F</div>
+      <div className="login-card">
+        <div className="login-logo">F</div>
+        <h1>FMB Survey Builder</h1>
+        <h2>Sign in to continue</h2>
 
-          <h1 className="text-center fw-bold mb-1" style={{ fontSize: '1.35rem', letterSpacing: '-0.02em' }}>
-            FMB Survey Builder
-          </h1>
-          <p className="text-center text-muted mb-4" style={{ fontSize: '0.875rem' }}>
-            Sign in to continue
-          </p>
+        {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
 
-          {error && (
-            <div className="alert alert-danger py-2 px-3 mb-3" style={{ fontSize: '0.875rem' }}>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label htmlFor="username" className="form-label fw-semibold" style={{ fontSize: '0.82rem' }}>
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                className="form-control"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                autoFocus
-                disabled={loading}
-              />
-            </div>
-
-            <div className="mb-4">
-              <label htmlFor="password" className="form-label fw-semibold" style={{ fontSize: '0.82rem' }}>
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                className="form-control"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                disabled={loading}
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary w-100 fw-semibold"
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="username">Username</label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              autoFocus
               disabled={loading}
-            >
-              {loading ? (
-                <><span className="spinner-border spinner-border-sm me-2" role="status" />&nbsp;Signing in…</>
-              ) : 'Sign In'}
-            </button>
-          </form>
-        </div>
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              disabled={loading}
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary btn-full"
+            style={{ marginTop: '1.5rem' }}
+            disabled={loading}
+          >
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
       </div>
     </div>
   );

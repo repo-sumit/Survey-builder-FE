@@ -67,19 +67,15 @@ const SurveyList = () => {
   if (loading) {
     return (
       <div className="survey-list-container">
-        <div className="skeleton skeleton-card mb-4" style={{ height: 72 }} />
-        <div className="row g-3 mb-4">
+        <div className="skeleton skeleton-card" style={{ height: 72, marginBottom: '1.5rem' }} />
+        <div className="stats-grid">
           {[1, 2, 3].map(i => (
-            <div key={i} className="col-4">
-              <div className="skeleton" style={{ height: 80, borderRadius: 12 }} />
-            </div>
+            <div key={i} className="skeleton" style={{ height: 80, borderRadius: 12 }} />
           ))}
         </div>
-        <div className="row g-3">
+        <div className="survey-grid">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="col-md-6 col-xl-4">
-              <div className="skeleton skeleton-card" />
-            </div>
+            <div key={i} className="skeleton skeleton-card" />
           ))}
         </div>
       </div>
@@ -92,24 +88,22 @@ const SurveyList = () => {
   return (
     <div className="survey-list-container">
 
-      {/* ── Page Header ──────────────────────────────────────────── */}
-      <div className="d-flex align-items-start justify-content-between mb-4 flex-wrap gap-2">
+      {/* ── Page Header ── */}
+      <div className="list-header">
         <div>
-          <h2 className="fw-bold mb-1" style={{ fontSize: '1.35rem' }}>Surveys</h2>
-          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
-            Create and manage surveys with automatic Excel export functionality
-          </p>
+          <h2>Surveys</h2>
+          <p className="subtitle">Create and manage surveys with automatic Excel export functionality</p>
         </div>
         {!isReadOnly && (
-          <div className="d-flex gap-2 flex-wrap">
+          <div className="header-actions">
             <button
-              className="btn btn-outline-secondary btn-sm fw-semibold"
+              className="btn btn-secondary btn-sm"
               onClick={() => navigate('/import')}
             >
               Import
             </button>
             <button
-              className="btn btn-primary btn-sm fw-semibold"
+              className="btn btn-primary btn-sm"
               onClick={() => navigate('/surveys/new')}
             >
               + Create Survey
@@ -118,172 +112,119 @@ const SurveyList = () => {
         )}
       </div>
 
-      {/* ── Stat Cards ───────────────────────────────────────────── */}
-      <div className="row g-3 mb-4">
-        <div className="col-4">
-          <div className="card border-0 shadow-sm text-center">
-            <div className="card-body py-3 px-2">
-              <div className="fw-bold" style={{ fontSize: '1.75rem', color: 'var(--bs-primary)' }}>
-                {totalSurveys}
-              </div>
-              <div className="text-muted" style={{ fontSize: '0.75rem' }}>Total</div>
-            </div>
-          </div>
+      {/* ── Stat Cards ── */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-value">{totalSurveys}</div>
+          <div className="stat-label">Total</div>
         </div>
-        <div className="col-4">
-          <div className="card border-0 shadow-sm text-center">
-            <div className="card-body py-3 px-2">
-              <div className="fw-bold" style={{ fontSize: '1.75rem', color: '#198754' }}>
-                {activeSurveys}
-              </div>
-              <div className="text-muted" style={{ fontSize: '0.75rem' }}>Active</div>
-            </div>
-          </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: 'var(--success)' }}>{activeSurveys}</div>
+          <div className="stat-label">Active</div>
         </div>
-        <div className="col-4">
-          <div className="card border-0 shadow-sm text-center">
-            <div className="card-body py-3 px-2">
-              <div className="fw-bold" style={{ fontSize: '1.75rem', color: '#6c757d' }}>
-                {totalSurveys - activeSurveys}
-              </div>
-              <div className="text-muted" style={{ fontSize: '0.75rem' }}>Inactive</div>
-            </div>
-          </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: 'var(--text-3)' }}>{totalSurveys - activeSurveys}</div>
+          <div className="stat-label">Inactive</div>
         </div>
       </div>
 
-      {/* ── Error ────────────────────────────────────────────────── */}
-      {error && (
-        <div className="alert alert-danger py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
-          {error}
-        </div>
-      )}
+      {/* ── Error ── */}
+      {error && <div className="error-message">{error}</div>}
 
-      {/* ── Empty State ──────────────────────────────────────────── */}
+      {/* ── Empty State ── */}
       {surveys.length === 0 ? (
-        <div className="card border-0 shadow-sm">
-          <div className="card-body text-center py-5">
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📋</div>
-            <h5 className="fw-semibold mb-2">No surveys yet</h5>
-            <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>
-              Create your first survey to get started.
-            </p>
-            {!isReadOnly && (
-              <button
-                className="btn btn-primary btn-sm fw-semibold"
-                onClick={() => navigate('/surveys/new')}
-              >
-                + Create New Survey
-              </button>
-            )}
-          </div>
+        <div className="empty-state">
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📋</div>
+          <p>No surveys yet. {!isReadOnly && <strong>Create your first survey to get started.</strong>}</p>
+          {!isReadOnly && (
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ marginTop: '1.25rem' }}
+              onClick={() => navigate('/surveys/new')}
+            >
+              + Create New Survey
+            </button>
+          )}
         </div>
       ) : (
 
-        /* ── Survey Cards Grid ─────────────────────────────────── */
-        <div className="row g-3">
+        /* ── Survey Cards Grid ── */
+        <div className="survey-grid">
           {surveys.map(survey => (
-            <div key={survey.surveyId} className="col-md-6 col-xl-4">
-              <div className="card border-0 shadow-sm h-100">
-                <div className="card-body d-flex flex-column p-3">
+            <div key={survey.surveyId} className="survey-card">
 
-                  {/* Title row */}
-                  <div className="d-flex align-items-start justify-content-between gap-2 mb-1">
-                    <h6 className="fw-bold mb-0" style={{ fontSize: '0.95rem', lineHeight: 1.35 }}>
-                      {survey.surveyName}
-                    </h6>
-                    {isPublished(survey) && (
-                      <span className="badge bg-success flex-shrink-0" style={{ fontSize: '0.68rem' }}>
-                        Published
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Survey ID */}
-                  <div className="mb-2" style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: 'var(--bs-secondary-color)' }}>
-                    {survey.surveyId}
-                  </div>
-
-                  {/* Description */}
-                  {survey.surveyDescription && (
-                    <p className="text-muted mb-2" style={{ fontSize: '0.82rem', lineHeight: 1.4 }}>
-                      {survey.surveyDescription}
-                    </p>
-                  )}
-
-                  {/* Badges */}
-                  <div className="d-flex flex-wrap gap-1 mb-3">
-                    <span
-                      className={`badge ${survey.isActive === 'Yes' ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'}`}
-                      style={{ fontSize: '0.7rem' }}
-                    >
-                      {survey.isActive === 'Yes' ? 'Active' : 'Inactive'}
-                    </span>
-                    <span
-                      className={`badge ${survey.public === 'Yes' ? 'bg-primary-subtle text-primary' : 'bg-secondary-subtle text-secondary'}`}
-                      style={{ fontSize: '0.7rem' }}
-                    >
-                      {survey.public === 'Yes' ? 'Public' : 'Private'}
-                    </span>
-                    {survey.mode && (
-                      <span className="badge bg-info-subtle text-info" style={{ fontSize: '0.7rem' }}>
-                        {survey.mode}
-                      </span>
-                    )}
-                    {survey.stateCode && (
-                      <span className="badge bg-warning-subtle text-warning-emphasis" style={{ fontSize: '0.7rem' }}>
-                        {survey.stateCode}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="mt-auto d-flex flex-wrap gap-1">
-                    <button
-                      className="btn btn-outline-primary btn-sm"
-                      style={{ fontSize: '0.75rem' }}
-                      onClick={() => navigate(`/surveys/${survey.surveyId}/questions`)}
-                    >
-                      Question Master
-                    </button>
-                    <button
-                      className="btn btn-outline-secondary btn-sm"
-                      style={{ fontSize: '0.75rem' }}
-                      onClick={() => navigate(`/surveys/${survey.surveyId}/preview`)}
-                    >
-                      Preview
-                    </button>
-                    {!isReadOnly && (
-                      <>
-                        <button
-                          className="btn btn-outline-secondary btn-sm"
-                          style={{ fontSize: '0.75rem' }}
-                          onClick={() => handleDuplicate(survey)}
-                        >
-                          Duplicate
-                        </button>
-                        <button
-                          className="btn btn-outline-secondary btn-sm"
-                          style={{ fontSize: '0.75rem' }}
-                          onClick={() => navigate(`/surveys/${survey.surveyId}/edit`)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-outline-danger btn-sm"
-                          style={{ fontSize: '0.75rem' }}
-                          onClick={() => handleDelete(survey.surveyId)}
-                          disabled={isPublished(survey)}
-                          title={isPublished(survey) ? 'Cannot delete a published survey' : 'Delete'}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                </div>
+              {/* Title row */}
+              <div className="survey-card-header">
+                <h3>{survey.surveyName}</h3>
+                {isPublished(survey) && (
+                  <span className="badge badge-published">Published</span>
+                )}
               </div>
+
+              {/* Survey ID */}
+              <div className="survey-id">{survey.surveyId}</div>
+
+              {/* Description */}
+              {survey.surveyDescription && (
+                <p className="survey-description">{survey.surveyDescription}</p>
+              )}
+
+              {/* Badges */}
+              <div className="survey-meta">
+                <span className={`badge ${survey.isActive === 'Yes' ? 'badge-active' : 'badge-inactive'}`}>
+                  {survey.isActive === 'Yes' ? 'Active' : 'Inactive'}
+                </span>
+                <span className="badge">
+                  {survey.public === 'Yes' ? 'Public' : 'Private'}
+                </span>
+                {survey.mode && (
+                  <span className="badge badge-mode">{survey.mode}</span>
+                )}
+                {survey.stateCode && (
+                  <span className="badge badge-state">{survey.stateCode}</span>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="survey-actions">
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => navigate(`/surveys/${survey.surveyId}/questions`)}
+                >
+                  Question Master
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => navigate(`/surveys/${survey.surveyId}/preview`)}
+                >
+                  Preview
+                </button>
+                {!isReadOnly && (
+                  <>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleDuplicate(survey)}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => navigate(`/surveys/${survey.surveyId}/edit`)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleDelete(survey.surveyId)}
+                      disabled={isPublished(survey)}
+                      title={isPublished(survey) ? 'Cannot delete a published survey' : 'Delete'}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
+
             </div>
           ))}
         </div>
