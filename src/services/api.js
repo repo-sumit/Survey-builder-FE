@@ -51,6 +51,27 @@ export const adminAPI = {
   }
 };
 
+// --- State Config API ---
+
+export const stateConfigAPI = {
+  getAll: async () => {
+    const response = await axios.get(`${API_BASE_URL}/admin/state-config`);
+    return response.data;
+  },
+  upsert: async (data) => {
+    const response = await axios.post(`${API_BASE_URL}/admin/state-config`, data);
+    return response.data;
+  },
+  update: async (stateCode, data) => {
+    const response = await axios.patch(`${API_BASE_URL}/admin/state-config/${stateCode}`, data);
+    return response.data;
+  },
+  delete: async (stateCode) => {
+    const response = await axios.delete(`${API_BASE_URL}/admin/state-config/${stateCode}`);
+    return response.data;
+  }
+};
+
 // --- Lock API ---
 
 export const lockAPI = {
@@ -176,8 +197,8 @@ export const exportAPI = {
 export const designationAPI = {
   getAll: async (params = {}) => {
     const q = new URLSearchParams();
-    if (params.stateCode)  q.set('stateCode',  params.stateCode);
-    if (params.activeOnly) q.set('activeOnly', 'true');
+    if (params.stateCode) q.set('stateCode', params.stateCode);
+    if (params.medium)    q.set('medium',    params.medium);
     const qs = q.toString() ? `?${q}` : '';
     const response = await axios.get(`${API_BASE_URL}/designations${qs}`);
     return response.data;
@@ -186,13 +207,37 @@ export const designationAPI = {
     const response = await axios.post(`${API_BASE_URL}/designations`, data);
     return response.data;
   },
-  update: async (designationId, data) => {
-    const response = await axios.patch(`${API_BASE_URL}/designations/${designationId}`, data);
+  update: async (id, data) => {
+    // id is the serial PK from the designation_hierarchy table
+    const response = await axios.patch(`${API_BASE_URL}/designations/${id}`, data);
+    return response.data;
+  },
+  delete: async (id, stateCode) => {
+    const q = stateCode ? `?stateCode=${stateCode}` : '';
+    const response = await axios.delete(`${API_BASE_URL}/designations/${id}${q}`);
     return response.data;
   },
   seedDefaults: async (stateCode) => {
     const response = await axios.post(`${API_BASE_URL}/designations/seed-defaults`, { stateCode });
     return response.data;
+  },
+  exportXlsx: async (stateCode) => {
+    const q = stateCode ? `?stateCode=${stateCode}` : '';
+    const response = await axios.get(`${API_BASE_URL}/designations/export${q}`, {
+      responseType: 'blob'
+    });
+    const disposition = response.headers['content-disposition'] || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const fileName = match ? match[1] : `designation_mapping.xlsx`;
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    return true;
   }
 };
 
