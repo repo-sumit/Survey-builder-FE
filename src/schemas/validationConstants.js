@@ -45,7 +45,7 @@ export const CONSTRAINTS = {
   OPTION_MAX: 20,
   OPTION_CHAR_MAX: 100,
   HIERARCHY_LEVEL_MIN: 1,
-  HIERARCHY_LEVEL_MAX: 7
+  HIERARCHY_LEVEL_MAX: 100   // designation_id range 1-100; level 99 = auto-included Test
 };
 
 // Validation messages
@@ -58,5 +58,5 @@ export const MESSAGES = {
   DATE_COMPARE: 'Close Date must be greater than or equal to Launch Date',
   GEO_FENCING_TAGGING: 'Geo Tagging must be "Yes" when Geo Fencing is "Yes"',
   HIERARCHY_DUPLICATE: 'Hierarchical Access Level must not contain duplicate values',
-  HIERARCHY_NUMERIC: 'Hierarchical Access Level must contain only numeric values (1-7)'
+  HIERARCHY_NUMERIC: 'Hierarchical Access Level must contain only numeric values (1-100)'
 };
