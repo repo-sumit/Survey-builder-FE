@@ -1,7 +1,8 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
+import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
 import Navigation from './components/Navigation';
@@ -15,6 +16,16 @@ import DesignationMapping from './components/DesignationMapping';
 import AccessSheet from './components/AccessSheet';
 import AdminPanel from './components/AdminPanel';
 import './App.css';
+
+/**
+ * StateOnlyRoute — redirects admin users to /admin.
+ * State users pass through normally.
+ */
+const StateOnlyRoute = ({ children }) => {
+  const { user } = useAuth();
+  if (user?.role === 'admin') return <Navigate to="/admin" replace />;
+  return children;
+};
 
 function App() {
   return (
@@ -34,16 +45,19 @@ function App() {
                     <Navigation />
                     <main className="main-content">
                       <Routes>
-                        <Route path="/" element={<SurveyList />} />
-                        <Route path="/surveys/new" element={<SurveyForm />} />
-                        <Route path="/surveys/:surveyId/edit" element={<SurveyForm />} />
-                        <Route path="/surveys/:surveyId/questions" element={<QuestionList />} />
-                        <Route path="/surveys/:surveyId/questions/new" element={<QuestionForm />} />
-                        <Route path="/surveys/:surveyId/questions/:questionId/edit" element={<QuestionForm />} />
-                        <Route path="/surveys/:surveyId/preview" element={<SurveyPreview />} />
-                        <Route path="/import" element={<ImportSurvey />} />
-                        <Route path="/designations" element={<DesignationMapping />} />
-                        <Route path="/access-sheet" element={<AccessSheet />} />
+                        {/* State-user-only routes — admin is redirected to /admin */}
+                        <Route path="/" element={<StateOnlyRoute><SurveyList /></StateOnlyRoute>} />
+                        <Route path="/surveys/new" element={<StateOnlyRoute><SurveyForm /></StateOnlyRoute>} />
+                        <Route path="/surveys/:surveyId/edit" element={<StateOnlyRoute><SurveyForm /></StateOnlyRoute>} />
+                        <Route path="/surveys/:surveyId/questions" element={<StateOnlyRoute><QuestionList /></StateOnlyRoute>} />
+                        <Route path="/surveys/:surveyId/questions/new" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
+                        <Route path="/surveys/:surveyId/questions/:questionId/edit" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
+                        <Route path="/surveys/:surveyId/preview" element={<StateOnlyRoute><SurveyPreview /></StateOnlyRoute>} />
+                        <Route path="/import" element={<StateOnlyRoute><ImportSurvey /></StateOnlyRoute>} />
+                        <Route path="/designations" element={<StateOnlyRoute><DesignationMapping /></StateOnlyRoute>} />
+                        <Route path="/access-sheet" element={<StateOnlyRoute><AccessSheet /></StateOnlyRoute>} />
+
+                        {/* Admin-only route */}
                         <Route
                           path="/admin"
                           element={
