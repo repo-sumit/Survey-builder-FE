@@ -233,7 +233,7 @@ const DesignationMapping = () => {
 
             <div className="form-row">
               <div className="form-group">
-                <label>List of Designations <span className="required">*</span></label>
+                <label>Designations <span className="required">*</span></label>
                 <input
                   type="text"
                   value={form.designation_name}
