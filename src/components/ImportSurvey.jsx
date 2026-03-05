@@ -2,11 +2,44 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
 // Extract error message from either a string or { field, message, value } object
-function formatError(err) {
+function formatError(err, fallback = '') {
   if (typeof err === 'string') return err;
-  if (err && typeof err === 'object' && err.message) return err.message;
-  return String(err);
+  if (typeof err === 'number' || typeof err === 'boolean') return String(err);
+  if (err === null || err === undefined) return fallback;
+  if (Array.isArray(err)) {
+    return err.map((item) => formatError(item)).filter(Boolean).join(', ') || fallback;
+  }
+  if (typeof err === 'object') {
+    if (typeof err.message === 'string' && err.message.trim()) return err.message;
+    if (typeof err.error === 'string' && err.error.trim()) return err.error;
+    if (typeof err.code === 'string') {
+      const message = typeof err.message === 'string' && err.message.trim()
+        ? err.message
+        : 'Request failed';
+      return `${err.code}: ${message}`;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch (_jsonErr) {
+      return fallback || 'Unexpected error';
+    }
+  }
+  return fallback || 'Unexpected error';
+}
+
+function normalizeApiErrorPayload(payload, fallback = 'Import failed') {
+  const normalized = payload && typeof payload === 'object' ? payload : {};
+  const error = formatError(normalized.error ?? normalized, fallback) || fallback;
+  const message = formatError(normalized.message, '');
+
+  return {
+    ...normalized,
+    error,
+    ...(message ? { message } : {})
+  };
 }
 
 const ImportSurvey = () => {
@@ -23,6 +56,16 @@ const ImportSurvey = () => {
     if (selectedFile) {
       const ext = selectedFile.name.split('.').pop().toLowerCase();
       if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        if (selectedFile.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+          setFile(null);
+          setResult(null);
+          setErrors({
+            error: `File is too large. Maximum supported size is ${Math.round(MAX_IMPORT_FILE_SIZE_BYTES / (1024 * 1024))} MB.`,
+            message: 'Please split the workbook/CSV into smaller files and retry.'
+          });
+          e.target.value = '';
+          return;
+        }
         setFile(selectedFile);
         setErrors(null);
         setResult(null);
@@ -63,17 +106,19 @@ const ImportSurvey = () => {
       }
     } catch (err) {
       console.error('Import error:', err);
-      if (err.response?.data?.validationErrors) {
-        setErrors(err.response.data);
-      } else if (err.response?.data) {
-        // Structured error without validationErrors (e.g., missing sheets, parse errors)
+      const responseData = err.response?.data;
+
+      if (responseData?.validationErrors) {
         setErrors({
-          error: err.response.data.error || 'Import failed',
-          message: err.response.data.message,
-          details: err.response.data.details
+          ...responseData,
+          error: formatError(responseData.error, 'Validation failed'),
+          message: formatError(responseData.message, '')
         });
+      } else if (responseData) {
+        // Structured error without validationErrors (e.g., missing sheets, parse errors)
+        setErrors(normalizeApiErrorPayload(responseData, 'Import failed'));
       } else {
-        setErrors({ error: err.message || 'Failed to import file' });
+        setErrors({ error: formatError(err.message, 'Failed to import file') });
       }
     } finally {
       setImporting(false);
@@ -194,9 +239,9 @@ const ImportSurvey = () => {
       {errors && !errors.validationErrors && (
         <div className="import-errors">
           <h3>Import Failed</h3>
-          <p style={{ marginBottom: errors.details ? '0.75rem' : 0 }}>{errors.error}</p>
-          {errors.message && <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{errors.message}</p>}
-          {errors.details?.sheetsFound && (
+          <p style={{ marginBottom: errors.details ? '0.75rem' : 0 }}>{formatError(errors.error, 'Import failed')}</p>
+          {errors.message && <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{formatError(errors.message)}</p>}
+          {Array.isArray(errors.details?.sheetsFound) && (
             <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-3)' }}>
               Sheets found in file: {errors.details.sheetsFound.map(s => `"${s}"`).join(', ') || 'none'}
             </p>
