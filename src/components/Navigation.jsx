@@ -62,7 +62,7 @@ const MoonIcon = () => (
   </svg>
 );
 
-/* ─── Theme hook — uses Bootstrap 5.3 data-bs-theme ─── */
+/* ─── Theme hook ─── */
 function useTheme() {
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem('theme');
@@ -70,8 +70,10 @@ function useTheme() {
   });
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    localStorage.setItem('theme', dark ? 'dark' : 'light');
+    const theme = dark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-bs-theme', theme);
+    localStorage.setItem('theme', theme);
   }, [dark]);
 
   return [dark, setDark];

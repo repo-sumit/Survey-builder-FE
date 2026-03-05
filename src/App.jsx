@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
@@ -37,6 +37,15 @@ const StateOnlyRoute = ({ children }) => {
 };
 
 function App() {
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const preferDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isValidSavedTheme = savedTheme === 'dark' || savedTheme === 'light';
+    const theme = isValidSavedTheme ? savedTheme : (preferDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-bs-theme', theme);
+  }, []);
+
   return (
     <Router>
       <AuthProvider>
