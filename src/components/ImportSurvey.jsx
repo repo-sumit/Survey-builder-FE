@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+// Extract error message from either a string or { field, message, value } object
+function formatError(err) {
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && err.message) return err.message;
+  return String(err);
+}
+
 const ImportSurvey = () => {
   const navigate = useNavigate();
   const [file, setFile]           = useState(null);
@@ -9,6 +16,7 @@ const ImportSurvey = () => {
   const [result, setResult]       = useState(null);
   const [errors, setErrors]       = useState(null);
   const [overwrite, setOverwrite] = useState(false);
+  const [errorFilter, setErrorFilter] = useState('all'); // 'all', 'survey', 'question'
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -35,6 +43,7 @@ const ImportSurvey = () => {
       setImporting(true);
       setErrors(null);
       setResult(null);
+      setErrorFilter('all');
 
       const formData = new FormData();
       formData.append('file', file);
@@ -45,33 +54,43 @@ const ImportSurvey = () => {
       });
 
       setResult(response.data);
-      alert(
-        `Import successful! ${response.data.surveysImported} survey(s) and ${response.data.questionsImported} question(s) imported.`
-      );
 
       if (response.data.surveys && response.data.surveys.length > 0) {
         const firstSurvey = response.data.surveys[0];
         setTimeout(() => {
           navigate(`/surveys/${firstSurvey.surveyId}/questions`);
-        }, 1000);
+        }, 1500);
       }
     } catch (err) {
       console.error('Import error:', err);
       if (err.response?.data?.validationErrors) {
         setErrors(err.response.data);
+      } else if (err.response?.data) {
+        // Structured error without validationErrors (e.g., missing sheets, parse errors)
+        setErrors({
+          error: err.response.data.error || 'Import failed',
+          message: err.response.data.message,
+          details: err.response.data.details
+        });
       } else {
-        const errorMessage = err.response?.data?.error || 'Failed to import file';
-        alert(errorMessage);
+        setErrors({ error: err.message || 'Failed to import file' });
       }
     } finally {
       setImporting(false);
     }
   };
 
+  const filteredErrors = errors?.validationErrors?.filter(e =>
+    errorFilter === 'all' || e.type === errorFilter
+  ) || [];
+
+  const surveyErrorCount = errors?.validationErrors?.filter(e => e.type === 'survey').length || 0;
+  const questionErrorCount = errors?.validationErrors?.filter(e => e.type === 'question').length || 0;
+
   return (
     <div className="import-survey-container">
 
-      {/* ── Page Header ── */}
+      {/* Page Header */}
       <div className="list-header">
         <div>
           <h2>Import Survey</h2>
@@ -82,14 +101,14 @@ const ImportSurvey = () => {
             className="btn btn-secondary btn-sm"
             onClick={() => navigate('/')}
           >
-            ← Back to Surveys
+            &larr; Back to Surveys
           </button>
         </div>
       </div>
 
-      {/* ── Instructions ── */}
+      {/* Instructions */}
       <div className="import-instructions">
-        <h3>📄 Import Instructions</h3>
+        <h3>Import Instructions</h3>
         <ul>
           <li>Upload an XLSX file containing both <strong>Survey Master</strong> and <strong>Question Master</strong> sheets</li>
           <li>Or upload separate CSV files for Survey Master or Question Master</li>
@@ -100,7 +119,7 @@ const ImportSurvey = () => {
         </ul>
       </div>
 
-      {/* ── Upload Form ── */}
+      {/* Upload Form */}
       <div className="admin-form-card">
 
         {/* Overwrite checkbox */}
@@ -159,46 +178,88 @@ const ImportSurvey = () => {
           disabled={!file || importing}
           style={{ marginTop: '0.5rem' }}
         >
-          {importing ? 'Importing…' : 'Import Survey'}
+          {importing ? 'Importing\u2026' : 'Import Survey'}
         </button>
       </div>
 
-      {/* ── Success ── */}
+      {/* Success */}
       {result && (
         <div className="import-success">
-          <h3>✓ Import Successful!</h3>
+          <h3>Import Successful!</h3>
           <p>{result.surveysImported} survey(s) and {result.questionsImported} question(s) imported.</p>
         </div>
       )}
 
-      {/* ── Validation Errors ── */}
-      {errors && errors.validationErrors && (
+      {/* Generic Error (no validation errors) */}
+      {errors && !errors.validationErrors && (
         <div className="import-errors">
-          <h3>⚠ Validation Errors</h3>
+          <h3>Import Failed</h3>
+          <p style={{ marginBottom: errors.details ? '0.75rem' : 0 }}>{errors.error}</p>
+          {errors.message && <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{errors.message}</p>}
+          {errors.details?.sheetsFound && (
+            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-3)' }}>
+              Sheets found in file: {errors.details.sheetsFound.map(s => `"${s}"`).join(', ') || 'none'}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Validation Errors */}
+      {errors && errors.validationErrors && errors.validationErrors.length > 0 && (
+        <div className="import-errors">
+          <h3>Validation Errors</h3>
           <p className="error-summary">
-            Found {errors.validationErrors.length} error(s) in{' '}
-            {errors.surveysCount} survey(s) and {errors.questionsCount} question(s)
+            Found {errors.validationErrors.length} issue(s) across{' '}
+            {errors.surveysCount} survey(s) and {errors.questionsCount} question(s).
+            No data was imported.
           </p>
+
+          {/* Filter tabs */}
+          <div className="error-filter-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            <button
+              className={`btn btn-sm ${errorFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setErrorFilter('all')}
+            >
+              All ({errors.validationErrors.length})
+            </button>
+            {surveyErrorCount > 0 && (
+              <button
+                className={`btn btn-sm ${errorFilter === 'survey' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setErrorFilter('survey')}
+              >
+                Survey ({surveyErrorCount})
+              </button>
+            )}
+            {questionErrorCount > 0 && (
+              <button
+                className={`btn btn-sm ${errorFilter === 'question' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setErrorFilter('question')}
+              >
+                Question ({questionErrorCount})
+              </button>
+            )}
+          </div>
+
           <div className="errors-table-container">
             <table className="errors-table">
               <thead>
                 <tr>
                   <th>Type</th>
-                  <th>Index</th>
+                  <th>Row</th>
                   <th>ID</th>
                   <th>Errors</th>
                 </tr>
               </thead>
               <tbody>
-                {errors.validationErrors.map((error, idx) => (
+                {filteredErrors.map((error, idx) => (
                   <tr key={idx}>
-                    <td><span className="sheet-badge">{error.type}</span></td>
+                    <td><span className={`sheet-badge sheet-badge-${error.type}`}>{error.type}</span></td>
                     <td>{error.index}</td>
                     <td><code>{error.surveyId || error.questionId}</code></td>
                     <td>
                       <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
                         {error.errors.map((err, errIdx) => (
-                          <li key={errIdx}>{err}</li>
+                          <li key={errIdx}>{formatError(err)}</li>
                         ))}
                       </ul>
                     </td>
