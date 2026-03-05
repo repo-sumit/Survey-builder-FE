@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = '/api';
+const AUTH_REQUEST_TIMEOUT_MS = 15000;
 
 // --- Axios interceptors ---
 
@@ -15,7 +16,10 @@ axios.interceptors.request.use((config) => {
 axios.interceptors.response.use(
   response => response,
   error => {
-    if (error.response?.status === 401) {
+    const requestUrl = typeof error.config?.url === 'string' ? error.config.url : '';
+    const isAuthLoginRequest = requestUrl.includes('/auth/login');
+
+    if (error.response?.status === 401 && !isAuthLoginRequest) {
       localStorage.removeItem('token');
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
@@ -29,8 +33,20 @@ axios.interceptors.response.use(
 
 export const authAPI = {
   login: async (username, password) => {
-    const response = await axios.post(`${API_BASE_URL}/auth/login`, { username, password });
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/login`,
+      { username, password },
+      { timeout: AUTH_REQUEST_TIMEOUT_MS }
+    );
     return response.data;
+  },
+  warmup: async () => {
+    await axios.get(`${API_BASE_URL}/health`, {
+      timeout: AUTH_REQUEST_TIMEOUT_MS,
+      // No auth required and this endpoint is cache-safe to bypass.
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    return true;
   }
 };
 

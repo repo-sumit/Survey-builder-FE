@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { authAPI } from '../services/api';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -9,6 +10,11 @@ const Login = () => {
   const [loading, setLoading]   = useState(false);
   const { login } = useAuth();
   const navigate  = useNavigate();
+
+  useEffect(() => {
+    // Warm up backend while the user is on the login screen (helps cold starts).
+    authAPI.warmup().catch(() => {});
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,7 +28,20 @@ const Login = () => {
       await login(username, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      const timeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+      if (timeout) {
+        setError('Login timed out. The server may be waking up. Please retry in a few seconds.');
+        return;
+      }
+
+      const apiError = err.response?.data?.error;
+      if (typeof apiError === 'string') {
+        setError(apiError);
+      } else if (apiError && typeof apiError === 'object' && typeof apiError.message === 'string') {
+        setError(apiError.message);
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
