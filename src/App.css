@@ -186,15 +186,11 @@ body {
   width: 34px;
   height: 34px;
   border-radius: var(--radius-md);
-  background: var(--blue);
-  color: white;
-  font-size: 1rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  object-fit: cover;
   flex-shrink: 0;
-  letter-spacing: -0.04em;
+  background: white;
+  padding: 2px;
   box-shadow: 0 4px 10px rgba(37,99,235,.30);
 }
 
@@ -806,7 +802,7 @@ body {
 /* ── 26. Login ──────────────────────────────────────────────── */
 .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--slate-900) 0%, var(--slate-800) 50%, #1e3a5f 100%); padding: 2rem; }
 .login-card { background: var(--surface); border-radius: var(--radius-xl); padding: 3rem 2.5rem; width: 100%; max-width: 420px; box-shadow: var(--shadow-xl); border: 1px solid rgba(255,255,255,.06); }
-.login-logo { width: 52px; height: 52px; border-radius: var(--radius-lg); background: var(--blue); color: white; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; box-shadow: 0 8px 20px rgba(37,99,235,.4); letter-spacing: -0.04em; }
+.login-logo { width: 52px; height: 52px; border-radius: var(--radius-lg); display: block; object-fit: cover; background: white; padding: 3px; margin: 0 auto 1.5rem; box-shadow: 0 8px 20px rgba(37,99,235,.4); }
 .login-card h1 { color: var(--text-1); font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.25rem; letter-spacing: -0.03em; }
 .login-card h2 { color: var(--text-3); font-size: var(--fs-base); font-weight: 400; text-align: center; margin-bottom: 2rem; }
 .login-built-for { color: var(--text-4); font-size: var(--fs-sm); font-weight: 500; text-align: center; letter-spacing: 0.03em; margin: -1.25rem 0 1.75rem; }

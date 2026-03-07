@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../services/api';
 
+const BRAND_LOGO_URL = 'https://i.ibb.co/Wv5BJFsZ/swiftchat.png';
 const INVALID_CREDENTIALS_MESSAGE = 'Please enter correct ID and password.';
 
 const parseLoginErrorMessage = (err) => {
@@ -71,7 +72,7 @@ const Login = () => {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div className="login-logo">F</div>
+        <img className="login-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
         <h1>FMB Survey Builder</h1>
         <h2>Sign in to continue</h2>
         <p className="login-built-for">Built for ConveGenius</p>

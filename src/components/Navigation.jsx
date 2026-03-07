@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
+const BRAND_LOGO_URL = 'https://i.ibb.co/Wv5BJFsZ/swiftchat.png';
+
 /* ─── Inline SVG Icons ─── */
 const SurveysIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -111,7 +113,7 @@ const Navigation = () => {
       {/* ── Mobile-only top header ── */}
       <div className="nav-mobile-header">
         <div className="nav-brand">
-          <div className="nav-brand-mark">F</div>
+          <img className="nav-brand-mark" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
           <span className="nav-brand-text">FMB Survey</span>
         </div>
         <div className="nav-mobile-right">
@@ -133,7 +135,7 @@ const Navigation = () => {
       <nav className="navigation">
         {/* Desktop brand */}
         <div className="nav-brand">
-          <div className="nav-brand-mark">F</div>
+          <img className="nav-brand-mark" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
           <span className="nav-brand-text">FMB Survey Builder</span>
         </div>
 
