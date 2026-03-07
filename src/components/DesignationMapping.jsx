@@ -128,10 +128,10 @@ const DesignationMapping = () => {
       <div className="list-header">
         <h2>Designation Mapping</h2>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exporting…' : '↓ Export'}
+          <button className="btn btn-secondary btn-sm btn-cta btn-icon-export" onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Exporting…' : 'Export'}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}>+ Add Designation</button>
+          <button className="btn btn-primary btn-sm btn-cta btn-icon-add" onClick={openAdd}>Add Designation</button>
         </div>
       </div>
 
@@ -254,12 +254,12 @@ const DesignationMapping = () => {
             </div>
 
             <div className="form-actions">
-              <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              <button type="submit" className={`btn btn-primary btn-sm btn-cta ${editingId !== null ? 'btn-icon-update' : 'btn-icon-create'}`} disabled={saving}>
                 {saving ? 'Saving…' : (editingId !== null ? 'Update' : 'Create')}
               </button>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
                 onClick={() => setShowForm(false)}
               >
                 Cancel
@@ -306,8 +306,8 @@ const DesignationMapping = () => {
                   <td className="text-muted">{row.medium_in_english}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(row)}>Edit</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(row)}>Delete</button>
+                      <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => openEdit(row)}>Edit</button>
+                      <button className="btn btn-danger btn-sm btn-cta btn-icon-delete" onClick={() => handleDelete(row)}>Delete</button>
                     </div>
                   </td>
                 </tr>

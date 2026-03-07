@@ -97,16 +97,16 @@ const SurveyList = () => {
         {!isReadOnly && (
           <div className="header-actions">
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm btn-cta btn-icon-import"
               onClick={() => navigate('/import')}
             >
               Import
             </button>
             <button
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm btn-cta btn-icon-create"
               onClick={() => navigate('/surveys/new')}
             >
-              + Create Survey
+              Create Survey
             </button>
           </div>
         )}
@@ -138,11 +138,11 @@ const SurveyList = () => {
           <p>No surveys yet. {!isReadOnly && <strong>Create your first survey to get started.</strong>}</p>
           {!isReadOnly && (
             <button
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm btn-cta btn-icon-create"
               style={{ marginTop: '1.25rem' }}
               onClick={() => navigate('/surveys/new')}
             >
-              + Create New Survey
+              Create New Survey
             </button>
           )}
         </div>
@@ -188,13 +188,13 @@ const SurveyList = () => {
               {/* Action Buttons */}
               <div className="survey-actions">
                 <button
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-primary btn-sm btn-cta btn-icon-question-master"
                   onClick={() => navigate(`/surveys/${survey.surveyId}/questions`)}
                 >
                   Question Master
                 </button>
                 <button
-                  className="btn btn-secondary btn-sm"
+                  className="btn btn-secondary btn-sm btn-cta btn-icon-preview"
                   onClick={() => navigate(`/surveys/${survey.surveyId}/preview`)}
                 >
                   Preview
@@ -202,19 +202,19 @@ const SurveyList = () => {
                 {!isReadOnly && (
                   <>
                     <button
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-secondary btn-sm btn-cta btn-icon-duplicate"
                       onClick={() => handleDuplicate(survey)}
                     >
                       Duplicate
                     </button>
                     <button
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit"
                       onClick={() => navigate(`/surveys/${survey.surveyId}/edit`)}
                     >
                       Edit
                     </button>
                     <button
-                      className="btn btn-danger btn-sm"
+                      className="btn btn-danger btn-sm btn-cta btn-icon-delete"
                       onClick={() => handleDelete(survey.surveyId)}
                       disabled={isPublished(survey)}
                       title={isPublished(survey) ? 'Cannot delete a published survey' : 'Delete'}

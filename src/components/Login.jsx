@@ -107,7 +107,7 @@ const Login = () => {
 
           <button
             type="submit"
-            className="btn btn-primary btn-full"
+            className="btn btn-primary btn-full btn-cta btn-icon-signin"
             style={{ marginTop: '1.5rem' }}
             disabled={loading}
           >

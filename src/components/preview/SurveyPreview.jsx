@@ -187,7 +187,7 @@ const SurveyPreview = () => {
     return (
       <div className="error-container">
         <div className="error-message">{error}</div>
-        <button className="btn btn-primary" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
+        <button className="btn btn-primary btn-cta btn-icon-back" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
           Back to Questions
         </button>
       </div>
@@ -198,7 +198,7 @@ const SurveyPreview = () => {
     return (
       <div className="empty-state">
         <p>No questions available for preview</p>
-        <button className="btn btn-primary" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
+        <button className="btn btn-primary btn-cta btn-icon-back" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
           Back to Questions
         </button>
       </div>
@@ -232,7 +232,7 @@ const SurveyPreview = () => {
           )}
           
           <button 
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-cta btn-icon-back"
             onClick={() => navigate(`/surveys/${surveyId}/questions`)}
           >
             Back to Questions
@@ -262,13 +262,13 @@ const SurveyPreview = () => {
         />
         <div className="preview-cta">
           <button
-            className="btn btn-primary"
+            className={`btn btn-primary btn-cta ${currentQuestionIndex < visibleQuestions.length - 1 ? 'btn-icon-next' : 'btn-icon-finish'}`}
             onClick={handleSubmitCurrent}
           >
             {currentQuestionIndex < visibleQuestions.length - 1 ? 'Submit & Next' : 'Finish Preview'}
           </button>
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-cta btn-icon-back"
             onClick={() => navigate(`/surveys/${surveyId}/questions`)}
           >
             Back to Questions

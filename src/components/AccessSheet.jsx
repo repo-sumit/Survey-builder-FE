@@ -131,7 +131,7 @@ const AccessSheet = () => {
           <div className="access-sheet-validation-header">
             <h3>⚠ Validation Failed — Sheet was NOT saved</h3>
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
               onClick={() => setValidationIssues(null)}
             >
               Dismiss
@@ -173,11 +173,11 @@ const AccessSheet = () => {
             Overwrites any previously stored dump.
           </p>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-cta btn-icon-download"
             onClick={handleDump}
             disabled={dumping || (isAdmin && !adminState.trim())}
           >
-            {dumping ? 'Generating…' : '⬇ Dump New Sheet'}
+            {dumping ? 'Generating…' : 'Dump New Sheet'}
           </button>
         </div>
 
@@ -200,11 +200,11 @@ const AccessSheet = () => {
             </div>
           )}
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-cta btn-icon-download"
             onClick={handleDownload}
             disabled={downloading || noData || !latest || loadingMeta}
           >
-            {downloading ? 'Downloading…' : '⬇ Download Last Sheet'}
+            {downloading ? 'Downloading…' : 'Download Last Sheet'}
           </button>
         </div>
       </div>

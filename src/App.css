@@ -1041,6 +1041,40 @@ body::after {
   font-weight: 600;
 }
 
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.btn-cta::before {
+  font-size: 0.95em;
+  line-height: 1;
+  opacity: 0.92;
+}
+
+.btn-icon-back::before { content: '←'; }
+.btn-icon-import::before { content: '⬆'; }
+.btn-icon-export::before { content: '⬇'; }
+.btn-icon-download::before { content: '⬇'; }
+.btn-icon-create::before { content: '+'; }
+.btn-icon-add::before { content: '+'; }
+.btn-icon-question-master::before { content: '☰'; }
+.btn-icon-preview::before { content: '◉'; }
+.btn-icon-duplicate::before { content: '⧉'; }
+.btn-icon-edit::before { content: '✎'; }
+.btn-icon-delete::before { content: '×'; }
+.btn-icon-cancel::before { content: '✕'; }
+.btn-icon-save::before { content: '✓'; }
+.btn-icon-update::before { content: '✓'; }
+.btn-icon-publish::before { content: '⬆'; }
+.btn-icon-unpublish::before { content: '↺'; }
+.btn-icon-next::before { content: '→'; }
+.btn-icon-finish::before { content: '✓'; }
+.btn-icon-view::before { content: '◌'; }
+.btn-icon-signin::before { content: '→'; }
+
 .btn-sm {
   padding: 0.38rem 0.8rem;
 }
@@ -1100,8 +1134,38 @@ body::after {
 }
 
 .btn-danger {
-  background: linear-gradient(140deg, #ff8f8f 0%, #ef6464 100%);
-  border-color: rgba(255, 164, 164, 0.60);
+  background: rgba(255, 143, 143, 0.06);
+  border-color: rgba(255, 143, 143, 0.24);
+  color: rgba(255, 196, 196, 0.68);
+  box-shadow: none;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255, 143, 143, 0.16);
+  border-color: rgba(255, 143, 143, 0.42);
+  color: #ffd3d3;
+  box-shadow: 0 8px 18px rgba(98, 30, 30, 0.22);
+}
+
+.btn-edit {
+  background: rgba(224, 120, 86, 0.16);
+  border-color: rgba(224, 120, 86, 0.46);
+  color: #ffe1d1;
+  font-weight: 700;
+}
+
+.btn-edit:hover:not(:disabled) {
+  background: rgba(224, 120, 86, 0.28);
+  border-color: rgba(224, 120, 86, 0.64);
+  color: #fff3eb;
+}
+
+:root[data-theme='light'] .btn-edit {
+  color: #6d3e2f;
+}
+
+:root[data-theme='light'] .btn-danger {
+  color: rgba(142, 85, 85, 0.86);
 }
 
 .survey-card,

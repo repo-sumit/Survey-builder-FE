@@ -152,7 +152,7 @@ const AdminPanel = () => {
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-1)' }}>
               State / U.T. Configuration
             </h3>
-            <button className="btn btn-primary btn-sm" onClick={openAddState}>+ Add State</button>
+            <button className="btn btn-primary btn-sm btn-cta btn-icon-add" onClick={openAddState}>Add State</button>
           </div>
 
           {statesError && <div className="error-message">{statesError}</div>}
@@ -205,12 +205,12 @@ const AdminPanel = () => {
                   )}
                 </div>
                 <div className="form-actions">
-                  <button type="submit" className="btn btn-primary btn-sm" disabled={savingState}>
+                  <button type="submit" className={`btn btn-primary btn-sm btn-cta ${editingState ? 'btn-icon-update' : 'btn-icon-create'}`} disabled={savingState}>
                     {savingState ? 'Saving…' : (editingState ? 'Update' : 'Create')}
                   </button>
                   <button
                     type="button"
-                    className="btn btn-secondary btn-sm"
+                    className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
                     onClick={() => setShowStateForm(false)}
                   >
                     Cancel
@@ -251,8 +251,8 @@ const AdminPanel = () => {
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => openEditState(s)}>Edit</button>
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDeleteState(s.state_code)}>Delete</button>
+                          <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => openEditState(s)}>Edit</button>
+                          <button className="btn btn-danger btn-sm btn-cta btn-icon-delete" onClick={() => handleDeleteState(s.state_code)}>Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -272,10 +272,10 @@ const AdminPanel = () => {
               User Management
             </h3>
             <button
-              className="btn btn-primary btn-sm"
+              className={`btn btn-primary btn-sm btn-cta ${showCreateForm ? 'btn-icon-cancel' : 'btn-icon-create'}`}
               onClick={() => setShowCreateForm(v => !v)}
             >
-              {showCreateForm ? 'Cancel' : '+ Create User'}
+              {showCreateForm ? 'Cancel' : 'Create User'}
             </button>
           </div>
 
@@ -339,10 +339,10 @@ const AdminPanel = () => {
                   </div>
                 </div>
                 <div className="form-actions">
-                  <button type="submit" className="btn btn-primary btn-sm">Create User</button>
+                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Create User</button>
                   <button
                     type="button"
-                    className="btn btn-secondary btn-sm"
+                    className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
                     onClick={() => setShowCreateForm(false)}
                   >
                     Cancel
@@ -412,8 +412,8 @@ const AdminPanel = () => {
                                 onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
                                 placeholder="New password (opt.)"
                               />
-                              <button className="btn btn-primary btn-sm" onClick={() => handleUpdate(u.id)}>Save</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setEditingUser(null)}>Cancel</button>
+                              <button className="btn btn-primary btn-sm btn-cta btn-icon-save" onClick={() => handleUpdate(u.id)}>Save</button>
+                              <button className="btn btn-secondary btn-sm btn-cta btn-icon-cancel" onClick={() => setEditingUser(null)}>Cancel</button>
                             </div>
                           </td>
                         </>
@@ -433,7 +433,7 @@ const AdminPanel = () => {
                             </span>
                           </td>
                           <td>
-                            <button className="btn btn-secondary btn-sm" onClick={() => startEdit(u)}>Edit</button>
+                            <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => startEdit(u)}>Edit</button>
                           </td>
                         </>
                       )}

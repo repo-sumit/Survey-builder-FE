@@ -143,10 +143,10 @@ const ImportSurvey = () => {
         </div>
         <div className="header-actions">
           <button
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary btn-sm btn-cta btn-icon-back"
             onClick={() => navigate('/')}
           >
-            &larr; Back to Surveys
+            Back to Surveys
           </button>
         </div>
       </div>
@@ -218,7 +218,7 @@ const ImportSurvey = () => {
         </div>
 
         <button
-          className="btn btn-primary"
+          className="btn btn-primary btn-cta btn-icon-import"
           onClick={handleImport}
           disabled={!file || importing}
           style={{ marginTop: '0.5rem' }}

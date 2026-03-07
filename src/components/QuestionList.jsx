@@ -234,20 +234,20 @@ const QuestionList = () => {
         </div>
         <div className="header-actions">
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-cta btn-icon-back"
             onClick={() => navigate('/')}
           >
             Back to Surveys
           </button>
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-cta btn-icon-preview"
             onClick={() => navigate(`/surveys/${surveyId}/preview`)}
             disabled={questions.length === 0}
           >
             Preview Survey
           </button>
           <button
-            className="btn btn-success"
+            className="btn btn-success btn-cta btn-icon-export"
             onClick={handleExport}
             disabled={exporting}
           >
@@ -256,7 +256,7 @@ const QuestionList = () => {
           {FEATURE_PUBLISH && !isReadOnly && (
             isPublished ? (
               <button
-                className="btn btn-warning"
+                className="btn btn-warning btn-cta btn-icon-unpublish"
                 onClick={handleUnpublish}
                 disabled={publishing}
               >
@@ -264,7 +264,7 @@ const QuestionList = () => {
               </button>
             ) : (
               <button
-                className="btn btn-publish"
+                className="btn btn-publish btn-cta btn-icon-publish"
                 onClick={handlePublish}
                 disabled={publishing || questions.length === 0}
               >
@@ -274,7 +274,7 @@ const QuestionList = () => {
           )}
           {!isReadOnly && !isPublished && (
             <button
-              className="btn btn-primary"
+              className="btn btn-primary btn-cta btn-icon-add"
               onClick={() => navigate(`/surveys/${surveyId}/questions/new`)}
             >
               Add Question
@@ -310,19 +310,19 @@ const QuestionList = () => {
                   {!isReadOnly && !isPublished && (
                     <>
                       <button
-                        className="btn btn-sm btn-secondary"
+                        className="btn btn-sm btn-secondary btn-edit btn-cta btn-icon-edit"
                         onClick={() => navigate(`/surveys/${surveyId}/questions/${question.questionId}/edit`)}
                       >
                         Edit
                       </button>
                       <button
-                        className="btn btn-sm btn-secondary"
+                        className="btn btn-sm btn-secondary btn-cta btn-icon-duplicate"
                         onClick={() => handleDuplicate(question.questionId)}
                       >
                         Duplicate
                       </button>
                       <button
-                        className="btn btn-sm btn-danger"
+                        className="btn btn-sm btn-danger btn-cta btn-icon-delete"
                         onClick={() => handleDelete(question.questionId)}
                       >
                         Delete
@@ -331,7 +331,7 @@ const QuestionList = () => {
                   )}
                   {(isReadOnly || isPublished) && (
                     <button
-                      className="btn btn-sm btn-secondary"
+                      className="btn btn-sm btn-secondary btn-cta btn-icon-view"
                       onClick={() => navigate(`/surveys/${surveyId}/questions/${question.questionId}/edit`)}
                     >
                       View

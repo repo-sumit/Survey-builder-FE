@@ -328,7 +328,7 @@ const SurveyForm = () => {
       <div className="form-header">
         <h2>{isEdit ? 'Edit Survey' : 'Create New Survey'}</h2>
         <button 
-          className="btn btn-secondary"
+          className="btn btn-secondary btn-cta btn-icon-back"
           onClick={() => navigate('/')}
         >
           Back to Surveys
@@ -705,14 +705,14 @@ const SurveyForm = () => {
         <div className="form-actions">
           <button 
             type="button" 
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-cta btn-icon-cancel"
             onClick={() => navigate('/')}
           >
             Cancel
           </button>
           <button 
             type="submit" 
-            className="btn btn-primary"
+            className={`btn btn-primary btn-cta ${isEdit ? 'btn-icon-update' : 'btn-icon-create'}`}
             disabled={
               loading || 
               !formData.surveyId || 

@@ -58,10 +58,10 @@ const DuplicateSurveyModal = ({ survey, onConfirm, onCancel }) => {
             </div>
             
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={onCancel}>
+              <button type="button" className="btn btn-secondary btn-cta btn-icon-cancel" onClick={onCancel}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary">
+              <button type="submit" className="btn btn-primary btn-cta btn-icon-duplicate">
                 Duplicate Survey
               </button>
             </div>
