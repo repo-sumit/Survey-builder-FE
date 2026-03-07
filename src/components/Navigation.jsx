@@ -85,6 +85,13 @@ const Navigation = () => {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [dark, setDark] = useTheme();
+  const [sidebarReady, setSidebarReady] = useState(false);
+
+  useEffect(() => {
+    // Trigger stagger entrance after mount
+    const timer = setTimeout(() => setSidebarReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const isActive = (path) =>
     path === '/'
@@ -132,7 +139,7 @@ const Navigation = () => {
       </div>
 
       {/* ── Desktop sidebar + Mobile bottom nav ── */}
-      <nav className="navigation">
+      <nav className={`navigation${sidebarReady ? ' nav-revealed' : ''}`}>
         {/* Desktop brand */}
         <div className="nav-brand">
           <img className="nav-brand-mark" src={BRAND_LOGO_URL} alt="SwiftChat logo" />

@@ -1386,3 +1386,903 @@ body::after {
     padding: 1rem 0.875rem 5.5rem;
   }
 }
+
+/* ============================================================
+   PREMIUM UI/UX ENHANCEMENTS – Apple × Senior Designer Polish
+   Custom cursor · Glassmorphism · Spotlight cards · Spring anims
+   Staggered reveals · Gradient borders · Orb effects · Micro-UX
+   ============================================================ */
+
+/* ── 1. Custom Cursor ──────────────────────────────────────── */
+.custom-cursor {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  background: var(--blue);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 10000;
+  transform: translate(-50%, -50%);
+  transition: width 0.25s cubic-bezier(.4,0,.2,1), height 0.25s cubic-bezier(.4,0,.2,1), background 0.2s, opacity 0.2s;
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+.custom-cursor.visible { opacity: 1; }
+.custom-cursor.hover-link {
+  width: 40px;
+  height: 40px;
+  background: rgba(224, 120, 86, 0.15);
+  mix-blend-mode: normal;
+  border: 1.5px solid rgba(224, 120, 86, 0.5);
+}
+.custom-cursor-ring {
+  position: fixed;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(224, 120, 86, 0.35);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s cubic-bezier(.4,0,.2,1), height 0.3s cubic-bezier(.4,0,.2,1), border-color 0.2s, opacity 0.2s;
+  opacity: 0;
+}
+.custom-cursor-ring.visible { opacity: 1; }
+.custom-cursor-ring.hover-link {
+  width: 50px;
+  height: 50px;
+  border-color: rgba(224, 120, 86, 0.2);
+}
+
+@media (pointer: coarse) {
+  .custom-cursor, .custom-cursor-ring { display: none !important; }
+}
+@media (max-width: 768px) {
+  .custom-cursor, .custom-cursor-ring { display: none !important; }
+}
+
+/* ── 2. Selection & Scrollbar Polish ──────────────────────── */
+::selection {
+  background: rgba(224, 120, 86, 0.35);
+  color: #ffffff;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(224, 120, 86, 0.25);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(224, 120, 86, 0.45); }
+
+/* ── 3. Page Entrance Animation ───────────────────────────── */
+@keyframes pageReveal {
+  from { opacity: 0; transform: translateY(16px) scale(0.99); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+.survey-list-container,
+.form-container,
+.question-list-container,
+.import-survey-container,
+.admin-panel,
+.survey-preview-container,
+.access-sheet-container {
+  animation: pageReveal 0.55s cubic-bezier(.4,0,.2,1) forwards;
+}
+
+/* ── 4. Staggered Grid Reveal ─────────────────────────────── */
+@keyframes staggerIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.survey-grid > .survey-card,
+.stats-grid > .stat-card,
+.edu-grid > .edu-card,
+.projects-grid > .project-card {
+  opacity: 0;
+  animation: staggerIn 0.5s cubic-bezier(.4,0,.2,1) forwards;
+}
+
+.survey-grid > .survey-card:nth-child(1),
+.stats-grid > .stat-card:nth-child(1) { animation-delay: 0.08s; }
+.survey-grid > .survey-card:nth-child(2),
+.stats-grid > .stat-card:nth-child(2) { animation-delay: 0.16s; }
+.survey-grid > .survey-card:nth-child(3),
+.stats-grid > .stat-card:nth-child(3) { animation-delay: 0.24s; }
+.survey-grid > .survey-card:nth-child(4) { animation-delay: 0.32s; }
+.survey-grid > .survey-card:nth-child(5) { animation-delay: 0.40s; }
+.survey-grid > .survey-card:nth-child(6) { animation-delay: 0.48s; }
+.survey-grid > .survey-card:nth-child(7) { animation-delay: 0.56s; }
+.survey-grid > .survey-card:nth-child(8) { animation-delay: 0.64s; }
+.survey-grid > .survey-card:nth-child(n+9) { animation-delay: 0.72s; }
+
+/* ── 5. Card Spotlight / Hover Glow ───────────────────────── */
+.survey-card,
+.stat-card,
+.question-card,
+.access-sheet-card,
+.project-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.survey-card::before,
+.question-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(224, 120, 86, 0.07),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.survey-card:hover::before,
+.question-card:hover::before {
+  opacity: 1;
+}
+
+/* Gradient border glow on hover */
+.survey-card::after {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px; bottom: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(224, 120, 86, 0) 0%,
+    rgba(224, 120, 86, 0.15) 50%,
+    rgba(255, 215, 0, 0.1) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
+  z-index: -1;
+}
+.survey-card:hover::after { opacity: 1; }
+
+/* ── 6. Stat Cards Enhancement ────────────────────────────── */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.35s cubic-bezier(.4,0,.2,1), box-shadow 0.35s;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(224, 120, 86, 0.04), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+.stat-card:hover::after { left: 150%; }
+
+.stat-value {
+  background: linear-gradient(135deg, #e07856, #ffd700);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── 7. Premium Button Micro-Interactions ─────────────────── */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent 50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.btn:hover:not(:disabled)::after { opacity: 1; }
+.btn:active:not(:disabled) { transform: scale(0.97) translateY(1px) !important; }
+
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer sweep on primary buttons */
+@keyframes btnShimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.btn-primary:hover:not(:disabled)::before {
+  animation: btnShimmer 0.7s ease forwards;
+}
+
+/* ── 8. Login Premium Effects ─────────────────────────────── */
+.login-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  z-index: 0;
+}
+.login-orb-1 {
+  width: 500px;
+  height: 500px;
+  background: rgba(224, 120, 86, 0.18);
+  top: -15%;
+  right: -10%;
+  animation: orbFloat 10s ease-in-out infinite;
+}
+.login-orb-2 {
+  width: 350px;
+  height: 350px;
+  background: rgba(126, 231, 135, 0.1);
+  bottom: -10%;
+  left: -5%;
+  animation: orbFloat 10s ease-in-out infinite reverse;
+}
+.login-orb-3 {
+  width: 250px;
+  height: 250px;
+  background: rgba(255, 215, 0, 0.08);
+  top: 60%;
+  right: 20%;
+  animation: orbFloat 8s ease-in-out infinite;
+  animation-delay: -3s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25%      { transform: translate(20px, -30px) scale(1.05); }
+  50%      { transform: translate(-10px, -50px) scale(1.02); }
+  75%      { transform: translate(-30px, -20px) scale(0.98); }
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  animation: loginCardReveal 0.8s cubic-bezier(.4,0,.2,1) forwards;
+  opacity: 0;
+}
+
+@keyframes loginCardReveal {
+  from { opacity: 0; transform: translateY(32px) scale(0.96); filter: blur(8px); }
+  to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* Animated border glow on login card */
+.login-card-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    rgba(224, 120, 86, 0.4),
+    rgba(255, 215, 0, 0.2),
+    rgba(126, 231, 135, 0.2),
+    rgba(224, 120, 86, 0.4)
+  );
+  filter: blur(16px);
+  opacity: 0.4;
+  z-index: -1;
+  animation: glowRotate 8s linear infinite;
+}
+
+@keyframes glowRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.login-card h1 {
+  background: linear-gradient(135deg, #ffffff 0%, #e07856 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: fadeInUp 0.6s 0.3s cubic-bezier(.4,0,.2,1) forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.login-card h2 {
+  animation: fadeInUp 0.6s 0.45s cubic-bezier(.4,0,.2,1) forwards;
+  opacity: 0;
+}
+
+.login-card form {
+  animation: fadeInUp 0.6s 0.55s cubic-bezier(.4,0,.2,1) forwards;
+  opacity: 0;
+}
+
+.login-logo {
+  animation: loginLogoReveal 0.8s 0.1s cubic-bezier(.4,0,.2,1) forwards;
+  opacity: 0;
+}
+
+@keyframes loginLogoReveal {
+  from { opacity: 0; transform: scale(0.6) rotate(-10deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* ── 9. Navigation Enhancements ───────────────────────────── */
+.navigation {
+  transition: width 0.3s cubic-bezier(.4,0,.2,1);
+}
+
+.nav-link {
+  position: relative;
+  transition: all 0.25s cubic-bezier(.4,0,.2,1);
+}
+
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: linear-gradient(180deg, var(--blue), rgba(255, 215, 0, 0.6));
+  border-radius: 999px;
+  animation: navIndicatorIn 0.3s cubic-bezier(.4,0,.2,1);
+}
+
+@keyframes navIndicatorIn {
+  from { height: 0; opacity: 0; }
+  to   { height: 60%; opacity: 1; }
+}
+
+.nav-link .nav-link-icon {
+  transition: transform 0.2s cubic-bezier(.4,0,.2,1);
+}
+.nav-link:hover .nav-link-icon {
+  transform: scale(1.15);
+}
+.nav-link.active .nav-link-icon {
+  filter: drop-shadow(0 0 6px rgba(224, 120, 86, 0.5));
+}
+
+.nav-user-avatar {
+  background: linear-gradient(135deg, #e07856, #de8f4a);
+  box-shadow: 0 4px 12px rgba(224, 120, 86, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.nav-user-card:hover .nav-user-avatar {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(224, 120, 86, 0.45);
+}
+
+.nav-brand-mark {
+  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+}
+.nav-brand:hover .nav-brand-mark {
+  transform: rotate(-8deg) scale(1.05);
+}
+
+/* ── 10. Enhanced Form Inputs ─────────────────────────────── */
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: var(--blue);
+  box-shadow:
+    0 0 0 3px rgba(224, 120, 86, 0.12),
+    0 0 20px rgba(224, 120, 86, 0.08);
+  transition: border-color 0.2s, box-shadow 0.3s cubic-bezier(.4,0,.2,1);
+}
+
+.form-group label {
+  transition: color 0.2s;
+}
+.form-group:focus-within label {
+  color: var(--blue);
+}
+
+/* ── 11. Question Cards ───────────────────────────────────── */
+.question-card {
+  transition: all 0.35s cubic-bezier(.4,0,.2,1);
+}
+
+.question-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 1px rgba(224, 120, 86, 0.2);
+}
+
+.question-card.child-question {
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg, var(--blue), rgba(255, 215, 0, 0.4)) 1;
+}
+
+.question-id {
+  background: linear-gradient(135deg, #e07856, #de8f4a);
+  box-shadow: 0 2px 8px rgba(224, 120, 86, 0.3);
+}
+
+/* ── 12. Modal Enhancements ───────────────────────────────── */
+.modal-overlay {
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+}
+
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-content {
+  animation: modalSlideIn 0.35s cubic-bezier(.4,0,.2,1) forwards;
+}
+
+/* ── 13. Translation Tabs ─────────────────────────────────── */
+.translation-tab {
+  position: relative;
+}
+
+.translation-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue), rgba(255, 215, 0, 0.6));
+  border-radius: 2px 2px 0 0;
+}
+
+/* ── 14. Badge Glow ───────────────────────────────────────── */
+.badge-active,
+.badge-published {
+  box-shadow: 0 0 8px rgba(126, 231, 135, 0.2);
+}
+
+.badge-inactive {
+  box-shadow: 0 0 8px rgba(255, 143, 143, 0.15);
+}
+
+/* ── 15. Empty State Enhancement ──────────────────────────── */
+.empty-state {
+  position: relative;
+  overflow: hidden;
+}
+
+.empty-state::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(224, 120, 86, 0.06), transparent 60%);
+  pointer-events: none;
+}
+
+/* ── 16. Skeleton Enhancement ─────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(224, 120, 86, 0.05) 0%,
+    rgba(224, 120, 86, 0.12) 50%,
+    rgba(224, 120, 86, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border: 1px solid rgba(224, 120, 86, 0.08);
+}
+
+/* ── 17. Tooltip / Label Hover Glow ───────────────────────── */
+.survey-card-header h3 {
+  transition: color 0.2s;
+}
+.survey-card:hover .survey-card-header h3 {
+  color: var(--blue);
+}
+
+.survey-id {
+  transition: all 0.25s;
+}
+.survey-card:hover .survey-id {
+  background: rgba(224, 120, 86, 0.15);
+  border-color: rgba(224, 120, 86, 0.3);
+  color: #ffd9c8;
+}
+
+/* ── 18. Section Headers Gradient ─────────────────────────── */
+.list-header h2,
+.form-header h2 {
+  background: linear-gradient(135deg, #ffffff 0%, var(--text-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:root[data-theme='light'] .list-header h2,
+:root[data-theme='light'] .form-header h2 {
+  background: linear-gradient(135deg, #261f1b 0%, #6a5b52 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── 19. Pill / Chip Buttons Enhancement ──────────────────── */
+.pill-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.pill-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(224, 120, 86, 0.08), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.pill-button:hover::after,
+.pill-button.selected::after { opacity: 1; }
+
+.pill-button.selected {
+  background: linear-gradient(140deg, #e07856, #de8f4a);
+  border-color: rgba(255, 210, 154, 0.5);
+  box-shadow: 0 6px 20px rgba(224, 120, 86, 0.35);
+}
+
+.likert-button.selected {
+  background: linear-gradient(140deg, #e07856, #de8f4a);
+  border-color: rgba(255, 210, 154, 0.5);
+  box-shadow: 0 6px 20px rgba(224, 120, 86, 0.35);
+}
+
+/* ── 20. Preview Navigation Chips ─────────────────────────── */
+.question-chip.active {
+  background: linear-gradient(140deg, #e07856, #de8f4a);
+  border-color: rgba(255, 210, 154, 0.5);
+  box-shadow: 0 4px 14px rgba(224, 120, 86, 0.35);
+  color: white;
+}
+
+.nav-arrow {
+  background: linear-gradient(135deg, #e07856, #de8f4a);
+  border: none;
+  box-shadow: 0 4px 14px rgba(224, 120, 86, 0.3);
+  transition: all 0.25s cubic-bezier(.4,0,.2,1);
+}
+.nav-arrow:hover:not(:disabled) {
+  transform: scale(1.12);
+  box-shadow: 0 6px 20px rgba(224, 120, 86, 0.45);
+}
+
+/* ── 21. Upload Area Enhancement ──────────────────────────── */
+.upload-placeholder {
+  transition: all 0.35s cubic-bezier(.4,0,.2,1);
+  position: relative;
+  overflow: hidden;
+}
+
+.upload-placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(224, 120, 86, 0.06), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.upload-placeholder:hover {
+  border-color: var(--blue);
+  transform: scale(1.01);
+}
+.upload-placeholder:hover::after { opacity: 1; }
+
+/* ── 22. Dashboard Header Enhancement ─────────────────────── */
+.dashboard-header {
+  background: linear-gradient(135deg, #0e0e1c 0%, rgba(224, 120, 86, 0.15) 50%, rgba(126, 231, 135, 0.05) 100%);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 50% 80% at 80% 0%, rgba(224, 120, 86, 0.2), transparent),
+    radial-gradient(ellipse 40% 60% at 20% 100%, rgba(126, 231, 135, 0.08), transparent);
+  pointer-events: none;
+}
+
+.dashboard-header h1 {
+  background: linear-gradient(135deg, #fff, #e07856);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── 23. Loading Spinner Enhancement ──────────────────────── */
+.spinner {
+  border-color: rgba(224, 120, 86, 0.15);
+  border-top-color: var(--blue);
+  box-shadow: 0 0 20px rgba(224, 120, 86, 0.1);
+}
+
+/* ── 24. Smooth Page Transitions ──────────────────────────── */
+.main-content {
+  position: relative;
+}
+
+.main-content > * {
+  will-change: opacity, transform;
+}
+
+/* ── 25. Focus Ring Enhancement ───────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── 26. Error/Success Message Animation ──────────────────── */
+.error-message,
+.success-message {
+  animation: fadeInUp 0.3s cubic-bezier(.4,0,.2,1) forwards;
+}
+
+/* ── 27. Admin Tab Enhancement ────────────────────────────── */
+.admin-tab.active {
+  position: relative;
+}
+
+.admin-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue), rgba(255, 215, 0, 0.5));
+  border-radius: 2px 2px 0 0;
+}
+
+/* ── 28. Table Row Hover Effect ───────────────────────────── */
+.errors-table tbody tr,
+.admin-table tbody tr {
+  transition: background 0.2s;
+}
+
+.errors-table tbody tr:hover,
+.admin-table tbody tr:hover {
+  background: rgba(224, 120, 86, 0.06);
+}
+
+/* ── 29. Reduced Motion Support ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .custom-cursor, .custom-cursor-ring { display: none !important; }
+}
+
+/* ── 30. Import Instructions Enhancement ──────────────────── */
+.import-instructions {
+  position: relative;
+  overflow: hidden;
+}
+
+.import-instructions::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(224, 120, 86, 0.08), transparent 70%);
+  pointer-events: none;
+}
+
+/* ── 31. Lock Warning Pulse ───────────────────────────────── */
+@keyframes warningPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.2); }
+  50%      { box-shadow: 0 0 0 6px rgba(255, 215, 0, 0); }
+}
+
+.lock-warning {
+  animation: warningPulse 2.5s ease-in-out infinite;
+}
+
+/* ── 32. File Input Drag Enhancement ──────────────────────── */
+.file-input {
+  transition: all 0.3s cubic-bezier(.4,0,.2,1);
+}
+
+.file-input:hover {
+  border-color: var(--blue);
+  background: rgba(224, 120, 86, 0.06);
+  transform: scale(1.005);
+}
+
+/* ── 33. Designation Filter Card ──────────────────────────── */
+.desig-filters {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: border-color 0.2s;
+}
+
+.desig-filters:hover {
+  border-color: rgba(224, 120, 86, 0.25);
+}
+
+/* ── 34. Animated Survey Description Truncation ───────────── */
+.survey-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.2s;
+}
+
+.survey-card:hover .survey-description {
+  color: var(--text-2);
+}
+
+/* ── 35. Form Container Enhancement ───────────────────────── */
+.form-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.form-container::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(224, 120, 86, 0.04), transparent 70%);
+  pointer-events: none;
+}
+
+/* ── 36. Language Checkbox Grid Enhancement ────────────────── */
+.lang-checkbox-item {
+  transition: all 0.25s cubic-bezier(.4,0,.2,1);
+}
+
+.lang-checkbox-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(224, 120, 86, 0.15);
+}
+
+/* ── 37. Access Sheet Cards ───────────────────────────────── */
+.access-sheet-card {
+  transition: all 0.35s cubic-bezier(.4,0,.2,1);
+}
+
+.access-sheet-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(224, 120, 86, 0.35);
+}
+
+.access-sheet-card-icon {
+  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+}
+.access-sheet-card:hover .access-sheet-card-icon {
+  transform: scale(1.15) rotate(-5deg);
+}
+
+/* ── 38. Navigation Reveal Animation ──────────────────────── */
+.navigation {
+  transform: translateX(-8px);
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(.4,0,.2,1), opacity 0.5s cubic-bezier(.4,0,.2,1);
+}
+.navigation.nav-revealed {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.nav-revealed .nav-link {
+  opacity: 0;
+  transform: translateX(-12px);
+  animation: navLinkReveal 0.4s cubic-bezier(.4,0,.2,1) forwards;
+}
+.nav-revealed .nav-link:nth-child(1) { animation-delay: 0.15s; }
+.nav-revealed .nav-link:nth-child(2) { animation-delay: 0.22s; }
+.nav-revealed .nav-link:nth-child(3) { animation-delay: 0.29s; }
+.nav-revealed .nav-link:nth-child(4) { animation-delay: 0.36s; }
+.nav-revealed .nav-link:nth-child(5) { animation-delay: 0.43s; }
+
+@keyframes navLinkReveal {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.nav-revealed .nav-footer {
+  opacity: 0;
+  animation: fadeInUp 0.5s cubic-bezier(.4,0,.2,1) 0.5s forwards;
+}
+
+.nav-revealed .nav-brand {
+  opacity: 0;
+  animation: fadeInUp 0.4s cubic-bezier(.4,0,.2,1) 0.05s forwards;
+}
+
+/* ── 39. Stat Card Spotlight (mouse tracking) ─────────────── */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: var(--mouse-y, 50%);
+  left: var(--mouse-x, 50%);
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(224, 120, 86, 0.12), transparent 70%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.stat-card:hover::after {
+  opacity: 1;
+}
+
+/* ── 40. Smooth scroll behavior ───────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── 41. Link color transitions ───────────────────────────── */
+a {
+  transition: color 0.2s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── 42. Login Mobile Fix ─────────────────────────────────── */
+@media (max-width: 480px) {
+  .login-container { padding: 1rem; }
+  .login-card { padding: 2rem 1.5rem; max-width: 100%; }
+  .login-orb { display: none; }
+}
+
+/* ── 43. Page loader enhancement ──────────────────────────── */
+@keyframes pulseLoad {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+div[style*="60vh"] {
+  animation: pulseLoad 1.5s ease-in-out infinite;
+}

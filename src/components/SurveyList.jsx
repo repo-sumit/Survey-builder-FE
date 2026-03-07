@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { surveyAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -64,6 +64,14 @@ const SurveyList = () => {
 
   const isPublished = (survey) => survey.publish?.status === 'PUBLISHED';
 
+  /* Card spotlight: track mouse position relative to card for glow effect */
+  const handleCardMouseMove = useCallback((e) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
+    card.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
+  }, []);
+
   if (loading) {
     return (
       <div className="survey-list-container">
@@ -114,15 +122,15 @@ const SurveyList = () => {
 
       {/* ── Stat Cards ── */}
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="stat-card" onMouseMove={handleCardMouseMove}>
           <div className="stat-value">{totalSurveys}</div>
           <div className="stat-label">Total</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" onMouseMove={handleCardMouseMove}>
           <div className="stat-value" style={{ color: 'var(--success)' }}>{activeSurveys}</div>
           <div className="stat-label">Active</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card" onMouseMove={handleCardMouseMove}>
           <div className="stat-value" style={{ color: 'var(--text-3)' }}>{totalSurveys - activeSurveys}</div>
           <div className="stat-label">Inactive</div>
         </div>
@@ -151,7 +159,7 @@ const SurveyList = () => {
         /* ── Survey Cards Grid ── */
         <div className="survey-grid">
           {surveys.map(survey => (
-            <div key={survey.surveyId} className="survey-card">
+            <div key={survey.surveyId} className="survey-card" onMouseMove={handleCardMouseMove}>
 
               {/* Title row */}
               <div className="survey-card-header">
