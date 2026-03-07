@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const API_BASE_URL = '/api';
-const AUTH_REQUEST_TIMEOUT_MS = 15000;
+const AUTH_LOGIN_TIMEOUT_MS = 45000;
+const AUTH_WARMUP_TIMEOUT_MS = 15000;
 
 // --- Axios interceptors ---
 
@@ -36,13 +37,13 @@ export const authAPI = {
     const response = await axios.post(
       `${API_BASE_URL}/auth/login`,
       { username, password },
-      { timeout: AUTH_REQUEST_TIMEOUT_MS }
+      { timeout: AUTH_LOGIN_TIMEOUT_MS }
     );
     return response.data;
   },
   warmup: async () => {
     await axios.get(`${API_BASE_URL}/health`, {
-      timeout: AUTH_REQUEST_TIMEOUT_MS,
+      timeout: AUTH_WARMUP_TIMEOUT_MS,
       // No auth required and this endpoint is cache-safe to bypass.
       headers: { 'Cache-Control': 'no-cache' }
     });

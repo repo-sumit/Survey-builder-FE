@@ -3,13 +3,47 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../services/api';
 
+const INVALID_CREDENTIALS_MESSAGE = 'Please enter correct ID and password.';
+
+const parseLoginErrorMessage = (err) => {
+  const statusCode = err?.response?.status;
+  const responseError = err?.response?.data?.error;
+  const responseMessage = err?.response?.data?.message;
+  const apiMessage = typeof responseError === 'string'
+    ? responseError
+    : typeof responseError?.message === 'string'
+      ? responseError.message
+      : typeof responseMessage === 'string'
+        ? responseMessage
+        : '';
+
+  if (statusCode === 401) {
+    return INVALID_CREDENTIALS_MESSAGE;
+  }
+
+  if (/invalid (username|id) or password/i.test(apiMessage)) {
+    return INVALID_CREDENTIALS_MESSAGE;
+  }
+
+  const timeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+  if (timeout) {
+    return 'Unable to sign in right now. Please try again.';
+  }
+
+  if (apiMessage) {
+    return apiMessage;
+  }
+
+  return 'Login failed. Please try again.';
+};
+
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError]       = useState(null);
-  const [loading, setLoading]   = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const navigate  = useNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Warm up backend while the user is on the login screen (helps cold starts).
@@ -28,20 +62,7 @@ const Login = () => {
       await login(username, password);
       navigate('/');
     } catch (err) {
-      const timeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
-      if (timeout) {
-        setError('Login timed out. The server may be waking up. Please retry in a few seconds.');
-        return;
-      }
-
-      const apiError = err.response?.data?.error;
-      if (typeof apiError === 'string') {
-        setError(apiError);
-      } else if (apiError && typeof apiError === 'object' && typeof apiError.message === 'string') {
-        setError(apiError.message);
-      } else {
-        setError('Login failed. Please try again.');
-      }
+      setError(parseLoginErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -53,6 +74,7 @@ const Login = () => {
         <div className="login-logo">F</div>
         <h1>FMB Survey Builder</h1>
         <h2>Sign in to continue</h2>
+        <p className="login-built-for">Built for ConveGenius</p>
 
         {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
 
@@ -63,7 +85,7 @@ const Login = () => {
               id="username"
               type="text"
               value={username}
-              onChange={e => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter your username"
               autoFocus
               disabled={loading}
@@ -76,7 +98,7 @@ const Login = () => {
               id="password"
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               disabled={loading}
             />
@@ -88,7 +110,7 @@ const Login = () => {
             style={{ marginTop: '1.5rem' }}
             disabled={loading}
           >
-            {loading ? 'Signing in…' : 'Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
       </div>
