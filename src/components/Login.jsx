@@ -1,10 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../services/api';
 
+const LOGIN_SIDE_IMAGE = 'https://i.ibb.co/gbgGT6PZ/image-9.png';
 const BRAND_LOGO_URL = 'https://i.ibb.co/Wv5BJFsZ/swiftchat.png';
 const INVALID_CREDENTIALS_MESSAGE = 'Please enter correct ID and password.';
+
+const EyeIcon = ({ crossed = false }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+    <circle cx="12" cy="12" r="3" />
+    {crossed && <line x1="3" y1="21" x2="21" y2="3" />}
+  </svg>
+);
 
 const parseLoginErrorMessage = (err) => {
   const statusCode = err?.response?.status;
@@ -41,6 +50,7 @@ const parseLoginErrorMessage = (err) => {
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -49,8 +59,6 @@ const Login = () => {
   useEffect(() => {
     authAPI.warmup().catch(() => {});
   }, []);
-
-  const analyticsBars = useMemo(() => [32, 48, 22, 44, 57, 28, 62, 35, 50], []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -76,32 +84,8 @@ const Login = () => {
     <div className="login-container">
       <div className="login-shell">
         <section className="login-visual" aria-hidden="true">
-          <div className="login-visual-head">
-            <img className="login-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
-            <div className="login-visual-brand-copy">
-              <p className="login-visual-brand">SwiftChat</p>
-              <p className="login-visual-sub">Business Manager</p>
-            </div>
-          </div>
-
-          <div className="login-analytics-card">
-            <div className="login-analytics-header">
-              <span className="analytics-dot" />
-              <span className="analytics-dot" />
-              <span className="analytics-dot" />
-            </div>
-
-            <div className="login-analytics-curve" />
-
-            <div className="login-analytics-footer">
-              <div className="login-analytics-donut" />
-              <div className="login-analytics-bars" role="presentation">
-                {analyticsBars.map((height, index) => (
-                  <span key={`${height}-${index}`} style={{ '--bar-height': `${height}px` }} />
-                ))}
-              </div>
-            </div>
-          </div>
+          <img className="login-visual-brand-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
+          <img className="login-side-image" src={LOGIN_SIDE_IMAGE} alt="Survey analytics illustration" />
         </section>
 
         <section className="login-card">
@@ -126,14 +110,26 @@ const Login = () => {
 
             <div className="form-group">
               <label htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                disabled={loading}
-              />
+              <div className="password-input-wrapper">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  disabled={loading}
+                >
+                  <EyeIcon crossed={showPassword} />
+                </button>
+              </div>
             </div>
 
             <button

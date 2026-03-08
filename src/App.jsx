@@ -114,12 +114,9 @@ const CustomCursor = () => {
 
 function App() {
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    const preferDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isValidSavedTheme = savedTheme === 'dark' || savedTheme === 'light';
-    const theme = isValidSavedTheme ? savedTheme : (preferDark ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.setAttribute('data-bs-theme', theme);
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.documentElement.setAttribute('data-bs-theme', 'light');
+    localStorage.setItem('theme', 'light');
   }, []);
 
   return (
