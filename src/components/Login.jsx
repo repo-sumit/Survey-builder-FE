@@ -84,12 +84,14 @@ const Login = () => {
     <div className="login-container">
       <div className="login-shell">
         <section className="login-visual" aria-hidden="true">
-          <img className="login-visual-brand-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
           <img className="login-side-image" src={LOGIN_SIDE_IMAGE} alt="Survey analytics illustration" />
         </section>
 
         <section className="login-card">
-          <h1>Log in to SwiftChat Survey Builder</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <h1>FMB Survey Builder</h1>
+            <img className="login-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
+          </div>
           <h2>Enter your credentials to continue</h2>
 
           {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}

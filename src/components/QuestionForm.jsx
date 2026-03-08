@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { questionAPI, surveyAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
 import { questionTypes, textInputTypes, questionMediaTypes, yesNoOptions, getFieldsForQuestionType } from '../schemas/questionTypeSchema';
-import TranslationPanel from './TranslationPanel';
 
 const QuestionForm = () => {
   const navigate = useNavigate();
@@ -16,12 +15,17 @@ const QuestionForm = () => {
   const [formData, setFormData] = useState({
     questionId: '',
     questionType: '',
+    questionDescription: '',
     isDynamic: 'No',
     questionDescriptionOptional: '',
+    tableHeaderValue: '',
+    tableQuestionValue: '',
+    options: [],
     maxValue: '',
     minValue: '',
     isMandatory: 'Yes',
     sourceQuestion: '',
+    medium: 'English',
     textInputType: 'None',
     textLimitCharacters: '',
     mode: 'New Data',
@@ -29,14 +33,12 @@ const QuestionForm = () => {
     questionMediaType: 'None',
     correctAnswerOptional: '',
     childrenQuestions: '',
-    outcomeDescription: '',
-    translations: {} // New field for multi-language support
+    outcomeDescription: ''
   });
 
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [fieldConfig, setFieldConfig] = useState({});
-  const [surveyLanguages, setSurveyLanguages] = useState(['English']);
 
   useEffect(() => {
     loadSurvey();
@@ -74,33 +76,37 @@ const QuestionForm = () => {
     }
   }, [formData.questionMediaType, formData.questionMediaLink]);
 
+  const parseAvailableMediums = (surveyData) => {
+    if (!surveyData) {
+      return [];
+    }
+
+    if (Array.isArray(surveyData.availableMediums)) {
+      return surveyData.availableMediums.map(lang => String(lang).trim()).filter(Boolean);
+    }
+
+    if (typeof surveyData.availableMediums === 'string') {
+      return surveyData.availableMediums.split(',').map(lang => lang.trim()).filter(Boolean);
+    }
+
+    return [];
+  };
+
+  const getDefaultMedium = (surveyData) => {
+    const mediums = parseAvailableMediums(surveyData);
+    return mediums[0] || 'English';
+  };
+
   const loadSurvey = async () => {
     try {
       const data = await surveyAPI.getById(surveyId);
       setSurvey(data);
-      
-      // Parse available languages from survey
-      const languages = typeof data.availableMediums === 'string' 
-        ? data.availableMediums.split(',').map(l => l.trim()).filter(l => l)
-        : (data.availableMediums || ['English']);
-      const orderedLanguages = languages.includes('English')
-        ? ['English', ...languages.filter(lang => lang !== 'English')]
-        : languages;
-      
-      setSurveyLanguages(orderedLanguages);
-      
-      // Initialize translations for all languages if creating new question
+
       if (!isEdit) {
-        const initialTranslations = {};
-        orderedLanguages.forEach(lang => {
-          initialTranslations[lang] = {
-            questionDescription: '',
-            options: [],
-            tableHeaderValue: '',
-            tableQuestionValue: ''
-          };
-        });
-        setFormData(prev => ({ ...prev, translations: initialTranslations }));
+        setFormData(prev => ({
+          ...prev,
+          medium: prev.medium || getDefaultMedium(data)
+        }));
       }
     } catch (err) {
       alert('Failed to load survey');
@@ -117,24 +123,23 @@ const QuestionForm = () => {
       }
       const question = questions.find(q => q.questionId === questionId);
       if (question) {
-        // If question doesn't have translations, create them from old format
-        if (!question.translations) {
-          const languages = surveyLanguages.length > 0 ? surveyLanguages : ['English'];
-          const translations = {};
-          
-          languages.forEach(lang => {
-            translations[lang] = {
-              questionDescription: question.questionDescription || '',
-              options: question.options || [],
-              tableHeaderValue: question.tableHeaderValue || '',
-              tableQuestionValue: question.tableQuestionValue || ''
-            };
-          });
-          
-          question.translations = translations;
-        }
-        
-        setFormData(question);
+        const translations = question.translations || {};
+        const fallbackTranslation = translations.English ||
+          (question.medium ? translations[question.medium] : null) ||
+          translations[Object.keys(translations)[0]] ||
+          {};
+
+        setFormData(prev => ({
+          ...prev,
+          ...question,
+          questionDescription: question.questionDescription || fallbackTranslation.questionDescription || '',
+          options: Array.isArray(question.options) && question.options.length > 0
+            ? question.options
+            : (fallbackTranslation.options || []),
+          tableHeaderValue: question.tableHeaderValue || fallbackTranslation.tableHeaderValue || '',
+          tableQuestionValue: question.tableQuestionValue || fallbackTranslation.tableQuestionValue || '',
+          medium: question.medium || prev.medium || getDefaultMedium(survey)
+        }));
       }
     } catch (err) {
       setExistingQuestions([]);
@@ -210,18 +215,56 @@ const QuestionForm = () => {
     }
   };
 
-  const handleTranslationsChange = (updatedTranslations) => {
+  const handleOptionChange = (index, field, value) => {
+    setFormData(prev => {
+      const options = [...(prev.options || [])];
+      const current = options[index] || { text: '', textInEnglish: '', children: '' };
+      const updated = {
+        ...current,
+        [field]: value
+      };
+
+      if (field === 'text' && (!current.textInEnglish || current.textInEnglish === current.text)) {
+        updated.textInEnglish = value;
+      }
+
+      options[index] = updated;
+      return {
+        ...prev,
+        options
+      };
+    });
+
+    if (errors.options) {
+      setErrors(prev => {
+        const nextErrors = { ...prev };
+        delete nextErrors.options;
+        return nextErrors;
+      });
+    }
+  };
+
+  const addOption = () => {
+    const maxOptions = fieldConfig?.maxOptions || 20;
+    if ((formData.options || []).length >= maxOptions) {
+      alert(`Maximum ${maxOptions} options allowed`);
+      return;
+    }
+
     setFormData(prev => ({
       ...prev,
-      translations: updatedTranslations
+      options: [...(prev.options || []), { text: '', textInEnglish: '', children: '' }]
+    }));
+  };
+
+  const removeOption = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      options: (prev.options || []).filter((_, optionIndex) => optionIndex !== index)
     }));
   };
 
   const buildQuestionPayload = () => {
-    const primaryLanguage = surveyLanguages.includes('English')
-      ? 'English'
-      : (surveyLanguages[0] || 'English');
-    const primaryTranslation = formData.translations?.[primaryLanguage] || {};
     const normalizedQuestionId = normalizeQuestionId(formData.questionId);
     const normalizedSourceQuestion = normalizeQuestionId(formData.sourceQuestion);
     const derivedParent = normalizedQuestionId.includes('.') ? getParentQuestionId(normalizedQuestionId) : '';
@@ -235,25 +278,13 @@ const QuestionForm = () => {
         children: normalizeChildList(option.children || '')
       };
     });
-    const normalizedTranslations = {};
-    Object.entries(formData.translations || {}).forEach(([lang, translation]) => {
-      normalizedTranslations[lang] = {
-        ...translation,
-        options: normalizeOptions(translation.options || [])
-      };
-    });
 
-    // Map translations back to legacy fields for validation and backend compatibility.
     return {
       ...formData,
       questionId: normalizedQuestionId,
       sourceQuestion: resolvedSourceQuestion,
-      translations: normalizedTranslations,
-      questionDescription: primaryTranslation.questionDescription || '',
-      options: normalizeOptions(primaryTranslation.options || []),
-      tableHeaderValue: primaryTranslation.tableHeaderValue || '',
-      tableQuestionValue: primaryTranslation.tableQuestionValue || '',
-      medium: primaryLanguage
+      options: normalizeOptions(formData.options || []),
+      medium: formData.medium || getDefaultMedium(survey)
     };
   };
 
@@ -261,10 +292,15 @@ const QuestionForm = () => {
     if (Array.isArray(question.options) && question.options.length > 0) {
       return question.options;
     }
+
     const translations = question.translations || {};
     if (fallbackLanguage && translations[fallbackLanguage]?.options) {
       return translations[fallbackLanguage].options;
     }
+    if (translations.English?.options) {
+      return translations.English.options;
+    }
+
     const firstLanguage = Object.keys(translations)[0];
     return translations[firstLanguage]?.options || [];
   };
@@ -312,50 +348,9 @@ const QuestionForm = () => {
       return;
     }
 
-    // Validate that all languages have required translations
-    let hasAllTranslations = true;
-    let missingLanguages = [];
-    let translationErrors = [];
-    
-    surveyLanguages.forEach(lang => {
-      const translation = formData.translations[lang];
-      if (!translation || !translation.questionDescription || translation.questionDescription.trim() === '') {
-        hasAllTranslations = false;
-        missingLanguages.push(lang);
-        translationErrors.push(`${lang}: Question Description is required`);
-      }
-      
-      if (fieldConfig.showTableFields) {
-        if (!translation?.tableHeaderValue || translation.tableHeaderValue.trim() === '') {
-          hasAllTranslations = false;
-          if (!missingLanguages.includes(lang)) {
-            missingLanguages.push(lang);
-          }
-          translationErrors.push(`${lang}: Table Header Value is required`);
-        }
-        if (!translation?.tableQuestionValue || translation.tableQuestionValue.trim() === '') {
-          hasAllTranslations = false;
-          if (!missingLanguages.includes(lang)) {
-            missingLanguages.push(lang);
-          }
-          translationErrors.push(`${lang}: Table Question Value is required`);
-        }
-      }
-      
-      if (fieldConfig.showOptions) {
-        if (!translation?.options || translation.options.length < 2) {
-          hasAllTranslations = false;
-          if (!missingLanguages.includes(lang)) {
-            missingLanguages.push(lang);
-          }
-          translationErrors.push(`${lang}: At least 2 options are required`);
-        }
-      }
-    });
-    
-    if (!hasAllTranslations) {
-      const errorMsg = `Missing required translations:\n${translationErrors.join('\n')}`;
-      setSubmitError(errorMsg);
+    if (fieldConfig.showOptions && (!formData.options || formData.options.length < 2)) {
+      setSubmitError('At least 2 options are required');
+      setErrors({ options: 'At least 2 options are required' });
       return;
     }
 
@@ -516,6 +511,22 @@ const QuestionForm = () => {
           </div>
 
           <div className="form-group">
+            <label htmlFor="questionDescription">
+              Question Description <span className="required">*</span>
+            </label>
+            <textarea
+              id="questionDescription"
+              name="questionDescription"
+              value={formData.questionDescription}
+              onChange={handleChange}
+              rows="3"
+              placeholder="Enter question text"
+              className={errors.questionDescription ? 'error' : ''}
+            />
+            {errors.questionDescription && <span className="error-text">{errors.questionDescription}</span>}
+          </div>
+
+          <div className="form-group">
             <label htmlFor="questionDescriptionOptional">Question Description Optional</label>
             <input
               type="text"
@@ -527,6 +538,42 @@ const QuestionForm = () => {
               placeholder="Optional description (max 256 characters)"
             />
           </div>
+
+          {fieldConfig.showTableFields && (
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="tableHeaderValue">
+                  Table Header Value <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="tableHeaderValue"
+                  name="tableHeaderValue"
+                  value={formData.tableHeaderValue}
+                  onChange={handleChange}
+                  placeholder="e.g., Header 1, Header 2"
+                  className={errors.tableHeaderValue ? 'error' : ''}
+                />
+                {errors.tableHeaderValue && <span className="error-text">{errors.tableHeaderValue}</span>}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="tableQuestionValue">
+                  Table Question Value <span className="required">*</span>
+                </label>
+                <textarea
+                  id="tableQuestionValue"
+                  name="tableQuestionValue"
+                  value={formData.tableQuestionValue}
+                  onChange={handleChange}
+                  rows="4"
+                  placeholder={'Format:\na:Question 1\nb:Question 2'}
+                  className={errors.tableQuestionValue ? 'error' : ''}
+                />
+                {errors.tableQuestionValue && <span className="error-text">{errors.tableQuestionValue}</span>}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Parent/Child Question Settings */}
@@ -547,17 +594,64 @@ const QuestionForm = () => {
           </div>
         </div>
 
-        {/* Multi-Language Translations */}
-        {formData.questionType && surveyLanguages.length > 0 && (
+        {fieldConfig.showOptions && (
           <div className="form-section">
-            <h3>Translations ({surveyLanguages.length} {surveyLanguages.length === 1 ? 'language' : 'languages'})</h3>
-            <TranslationPanel
-              languages={surveyLanguages}
-              translations={formData.translations}
-              onChange={handleTranslationsChange}
-              questionType={formData.questionType}
-              fieldConfig={fieldConfig}
-            />
+            <h3>Options</h3>
+            {errors.options && <span className="error-text">{errors.options}</span>}
+
+            <div className="options-table" style={{ marginTop: '0.625rem' }}>
+              <div className="options-table-row options-table-header">
+                <div className="options-table-cell options-table-label">Option Text</div>
+                {fieldConfig.showOptionChildren && (
+                  <div className="options-table-cell options-table-label">Child Questions</div>
+                )}
+                <div className="options-table-cell options-table-label">Action</div>
+              </div>
+
+              {(formData.options || []).map((option, index) => (
+                <div className="options-table-row" key={`option-${index}`}>
+                  <div className="options-table-cell">
+                    <input
+                      type="text"
+                      value={option?.text || ''}
+                      onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
+                      placeholder={`Option ${index + 1}`}
+                    />
+                  </div>
+                  {fieldConfig.showOptionChildren && (
+                    <div className="options-table-cell">
+                      <input
+                        type="text"
+                        className="options-table-child-input"
+                        value={option?.children || ''}
+                        onChange={(e) => handleOptionChange(index, 'children', e.target.value)}
+                        placeholder="e.g., 1.1, 1.2"
+                      />
+                    </div>
+                  )}
+                  <div className="options-table-cell">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      onClick={() => removeOption(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="options-section" style={{ marginTop: '0.625rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={addOption}
+                disabled={(formData.options || []).length >= (fieldConfig?.maxOptions || 20)}
+              >
+                Add Option ({(formData.options || []).length}/{fieldConfig?.maxOptions || 20})
+              </button>
+            </div>
           </div>
         )}
 
