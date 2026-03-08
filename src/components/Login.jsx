@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../services/api';
@@ -47,17 +47,20 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Warm up backend while the user is on the login screen (helps cold starts).
     authAPI.warmup().catch(() => {});
   }, []);
+
+  const analyticsBars = useMemo(() => [32, 48, 22, 44, 57, 28, 62, 35, 50], []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+
     if (!username.trim() || !password.trim()) {
       setError('Username and password are required');
       return;
     }
+
     try {
       setLoading(true);
       await login(username, password);
@@ -71,55 +74,80 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      {/* Floating orbs for depth and ambience */}
-      <div className="login-orb login-orb-1" />
-      <div className="login-orb login-orb-2" />
-      <div className="login-orb login-orb-3" />
-
-      <div className="login-card">
-        <div className="login-card-glow" />
-        <img className="login-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
-        <h1>FMB Survey Builder</h1>
-        <h2>Sign in to continue</h2>
-        <p className="login-built-for">Built for ConveGenius</p>
-
-        {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              autoFocus
-              disabled={loading}
-            />
+      <div className="login-shell">
+        <section className="login-visual" aria-hidden="true">
+          <div className="login-visual-head">
+            <img className="login-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
+            <div className="login-visual-brand-copy">
+              <p className="login-visual-brand">SwiftChat</p>
+              <p className="login-visual-sub">Business Manager</p>
+            </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              disabled={loading}
-            />
-          </div>
+          <div className="login-analytics-card">
+            <div className="login-analytics-header">
+              <span className="analytics-dot" />
+              <span className="analytics-dot" />
+              <span className="analytics-dot" />
+            </div>
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-full btn-cta btn-icon-signin"
-            style={{ marginTop: '1.5rem' }}
-            disabled={loading}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
+            <div className="login-analytics-curve" />
+
+            <div className="login-analytics-footer">
+              <div className="login-analytics-donut" />
+              <div className="login-analytics-bars" role="presentation">
+                {analyticsBars.map((height, index) => (
+                  <span key={`${height}-${index}`} style={{ '--bar-height': `${height}px` }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="login-card">
+          <h1>Log in to SwiftChat Survey Builder</h1>
+          <h2>Enter your credentials to continue</h2>
+
+          {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
+
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label htmlFor="username">User ID</label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your user ID"
+                autoFocus
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-full btn-cta btn-icon-signin"
+              style={{ marginTop: '1.5rem' }}
+              disabled={loading}
+            >
+              {loading ? 'Signing in...' : 'Log in'}
+            </button>
+          </form>
+
+          <p className="login-built-for">Built for ConveGenius</p>
+        </section>
       </div>
     </div>
   );

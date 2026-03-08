@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
 import Navigation from './components/Navigation';
 import './App.css';
+import './swiftchatRedesign.css';
 
 /* Lazy-loaded route components — each gets its own chunk */
 const SurveyList = lazy(() => import('./components/SurveyList'));
