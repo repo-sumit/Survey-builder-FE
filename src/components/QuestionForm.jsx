@@ -873,117 +873,6 @@ const QuestionForm = () => {
           </div>
         )}
 
-        {/* ── SETTINGS ── */}
-        <div className="form-section">
-          <h3>Settings</h3>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="isMandatory">Is Mandatory</label>
-              <select id="isMandatory" name="isMandatory" value={formData.isMandatory} onChange={handleChange}>
-                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="isDynamic">Is Dynamic</label>
-              <select
-                id="isDynamic"
-                name="isDynamic"
-                value={formData.isDynamic}
-                onChange={handleChange}
-                disabled={fieldConfig.isDynamic !== undefined}
-              >
-                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-              {fieldConfig.isDynamic !== undefined && <small>Auto-set based on question type</small>}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="mode">Mode</label>
-              <select id="mode" name="mode" value={formData.mode} onChange={handleChange}>
-                <option value="None">None</option>
-                <option value="New Data">New Data</option>
-                <option value="Correction">Correction</option>
-                <option value="Delete Data">Delete Data</option>
-              </select>
-            </div>
-          </div>
-
-          {fieldConfig.showTextInputType && (
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="textInputType">Text Input Type</label>
-                <select
-                  id="textInputType"
-                  name="textInputType"
-                  value={formData.textInputType}
-                  onChange={handleChange}
-                  disabled={Boolean(fieldConfig.textInputTypeValue)}
-                >
-                  {textInputTypes.map(type => <option key={type} value={type}>{type}</option>)}
-                </select>
-              </div>
-
-              {fieldConfig.showTextLimit && (
-                <div className="form-group">
-                  <label htmlFor="textLimitCharacters">Text Limit (Characters)</label>
-                  <input
-                    type="number"
-                    id="textLimitCharacters"
-                    name="textLimitCharacters"
-                    value={formData.textLimitCharacters}
-                    onChange={handleChange}
-                    placeholder="Default: 1024"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {fieldConfig.showMaxMin && (
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="minValue">Min Value</label>
-                <input type="text" id="minValue" name="minValue" value={formData.minValue} onChange={handleChange} placeholder="Minimum value" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="maxValue">Max Value</label>
-                <input type="text" id="maxValue" name="maxValue" value={formData.maxValue} onChange={handleChange} placeholder="Maximum value" />
-              </div>
-            </div>
-          )}
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="questionMediaType">Question Media Type</label>
-              <select
-                id="questionMediaType"
-                name="questionMediaType"
-                value={formData.questionMediaType}
-                onChange={handleChange}
-                disabled={Boolean(fieldConfig.questionMediaTypeValue)}
-              >
-                {questionMediaTypes.map(type => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="questionMediaLink">Question Media Link</label>
-              <input
-                type="text"
-                id="questionMediaLink"
-                name="questionMediaLink"
-                value={formData.questionMediaLink}
-                onChange={handleChange}
-                placeholder="URL to media file"
-                disabled={formData.questionMediaType === 'None'}
-              />
-              {formData.questionMediaType === 'None' && <small>Disabled when Media Type is None</small>}
-            </div>
-          </div>
-        </div>
-
         {/* ── TRANSLATIONS ── */}
         {nonEnglishLanguages.length > 0 && (
           <div className="form-section">
@@ -1105,6 +994,117 @@ const QuestionForm = () => {
             ))}
           </div>
         )}
+
+        {/* ── SETTINGS ── */}
+        <div className="form-section">
+          <h3>Settings</h3>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="isMandatory">Is Mandatory</label>
+              <select id="isMandatory" name="isMandatory" value={formData.isMandatory} onChange={handleChange}>
+                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="isDynamic">Is Dynamic</label>
+              <select
+                id="isDynamic"
+                name="isDynamic"
+                value={formData.isDynamic}
+                onChange={handleChange}
+                disabled={fieldConfig.isDynamic !== undefined}
+              >
+                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              {fieldConfig.isDynamic !== undefined && <small>Auto-set based on question type</small>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="mode">Mode</label>
+              <select id="mode" name="mode" value={formData.mode} onChange={handleChange}>
+                <option value="None">None</option>
+                <option value="New Data">New Data</option>
+                <option value="Correction">Correction</option>
+                <option value="Delete Data">Delete Data</option>
+              </select>
+            </div>
+          </div>
+
+          {fieldConfig.showTextInputType && (
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="textInputType">Text Input Type</label>
+                <select
+                  id="textInputType"
+                  name="textInputType"
+                  value={formData.textInputType}
+                  onChange={handleChange}
+                  disabled={Boolean(fieldConfig.textInputTypeValue)}
+                >
+                  {textInputTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </div>
+
+              {fieldConfig.showTextLimit && (
+                <div className="form-group">
+                  <label htmlFor="textLimitCharacters">Text Limit (Characters)</label>
+                  <input
+                    type="number"
+                    id="textLimitCharacters"
+                    name="textLimitCharacters"
+                    value={formData.textLimitCharacters}
+                    onChange={handleChange}
+                    placeholder="Default: 1024"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {fieldConfig.showMaxMin && (
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="minValue">Min Value</label>
+                <input type="text" id="minValue" name="minValue" value={formData.minValue} onChange={handleChange} placeholder="Minimum value" />
+              </div>
+              <div className="form-group">
+                <label htmlFor="maxValue">Max Value</label>
+                <input type="text" id="maxValue" name="maxValue" value={formData.maxValue} onChange={handleChange} placeholder="Maximum value" />
+              </div>
+            </div>
+          )}
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="questionMediaType">Question Media Type</label>
+              <select
+                id="questionMediaType"
+                name="questionMediaType"
+                value={formData.questionMediaType}
+                onChange={handleChange}
+                disabled={Boolean(fieldConfig.questionMediaTypeValue)}
+              >
+                {questionMediaTypes.map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="questionMediaLink">Question Media Link</label>
+              <input
+                type="text"
+                id="questionMediaLink"
+                name="questionMediaLink"
+                value={formData.questionMediaLink}
+                onChange={handleChange}
+                placeholder="URL to media file"
+                disabled={formData.questionMediaType === 'None'}
+              />
+              {formData.questionMediaType === 'None' && <small>Disabled when Media Type is None</small>}
+            </div>
+          </div>
+        </div>
 
         {/* ── FORM ACTIONS ── */}
         <div className="form-actions">
