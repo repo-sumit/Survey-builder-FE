@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { questionAPI, surveyAPI, translateAPI } from '../services/api';
+import { questionAPI, surveyAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
 import { questionTypes, textInputTypes, questionMediaTypes, yesNoOptions, getFieldsForQuestionType } from '../schemas/questionTypeSchema';
 import { getNativeScript, getISOCode } from '../schemas/languageMappings';
@@ -70,9 +70,6 @@ const QuestionForm = () => {
   // Per-language translated content (for non-English languages only)
   // Shape: { Hindi: { questionDescription, tableHeaders: ['',''], tableQuestions: [{text}], options: [{text}] }, ... }
   const [langTranslations, setLangTranslations] = useState({});
-  const [translating, setTranslating] = useState({});     // { Hindi: true/false }
-  const [translateErrors, setTranslateErrors] = useState({}); // { Hindi: 'error msg' }
-
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [fieldConfig, setFieldConfig] = useState({});
@@ -362,64 +359,6 @@ const QuestionForm = () => {
       options[index] = { ...options[index], text: value };
       return { ...prev, [lang]: { ...langData, options } };
     });
-  };
-
-  const translateAll = async (lang) => {
-    const isoCode = getISOCode(lang);
-    if (!isoCode) {
-      setTranslateErrors(prev => ({
-        ...prev,
-        [lang]: `Auto-translation is not available for ${lang}. Please enter the translation manually.`
-      }));
-      return;
-    }
-    if (!formData.questionDescription?.trim()) {
-      setTranslateErrors(prev => ({
-        ...prev,
-        [lang]: 'Please enter the English question description before translating.'
-      }));
-      return;
-    }
-
-    setTranslating(prev => ({ ...prev, [lang]: true }));
-    setTranslateErrors(prev => ({ ...prev, [lang]: null }));
-
-    try {
-      const updates = { ...(langTranslations[lang] || {}) };
-
-      updates.questionDescription = await translateAPI.translate(formData.questionDescription, isoCode);
-
-      if (fieldConfig.showTableFields) {
-        updates.tableHeaders = await Promise.all(
-          tableHeaders.map(async h => h?.trim() ? await translateAPI.translate(h, isoCode) : h || '')
-        );
-        updates.tableQuestions = await Promise.all(
-          tableQuestions.map(async q => q.text?.trim()
-            ? { text: await translateAPI.translate(q.text, isoCode) }
-            : { text: q.text || '' }
-          )
-        );
-      }
-
-      if (fieldConfig.showOptions && formData.options?.length > 0) {
-        const translatedOptions = await Promise.all(
-          formData.options.map(async (opt, i) => {
-            const text = opt.text?.trim();
-            if (!text) return langTranslations[lang]?.options?.[i] || { text: '' };
-            const translated = await translateAPI.translate(text, isoCode);
-            return { text: translated };
-          })
-        );
-        updates.options = translatedOptions;
-      }
-
-      setLangTranslations(prev => ({ ...prev, [lang]: updates }));
-    } catch (err) {
-      const msg = err.response?.data?.message || err.message || `Failed to translate to ${lang}`;
-      setTranslateErrors(prev => ({ ...prev, [lang]: msg }));
-    } finally {
-      setTranslating(prev => ({ ...prev, [lang]: false }));
-    }
   };
 
   // ─── Payload builder ──────────────────────────────────────────────────────
@@ -878,7 +817,7 @@ const QuestionForm = () => {
           <div className="form-section">
             <h3>Translations</h3>
             <p className="translation-section-hint">
-              Provide the question content in other survey languages. Use "Auto-translate" to fill from English automatically, then review and adjust as needed.
+              Provide the question content in other survey languages below.
             </p>
 
             {nonEnglishLanguages.map(lang => (
@@ -888,28 +827,7 @@ const QuestionForm = () => {
                     <strong>{lang}</strong>
                     <span className="translation-native-script">({getNativeScript(lang)})</span>
                   </div>
-                  <div className="translation-lang-actions">
-                    {getISOCode(lang) ? (
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${translating[lang] ? 'btn-secondary' : 'btn-secondary'}`}
-                        onClick={() => translateAll(lang)}
-                        disabled={translating[lang] || !formData.questionDescription?.trim()}
-                        title={!formData.questionDescription?.trim() ? 'Enter English description first' : `Auto-translate all fields to ${lang}`}
-                      >
-                        {translating[lang] ? '⟳ Translating…' : '↻ Auto-translate from English'}
-                      </button>
-                    ) : (
-                      <span className="badge translation-manual-badge">Manual entry only</span>
-                    )}
-                  </div>
                 </div>
-
-                {translateErrors[lang] && (
-                  <div className="error-message translation-error">
-                    {translateErrors[lang]}
-                  </div>
-                )}
 
                 <div className="form-group">
                   <label>Description in {lang}</label>

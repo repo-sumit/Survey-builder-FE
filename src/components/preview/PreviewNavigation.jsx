@@ -1,10 +1,11 @@
 import React from 'react';
 
-const PreviewNavigation = ({ 
-  currentQuestion, 
-  totalQuestions, 
-  onNavigate, 
-  questions 
+const PreviewNavigation = ({
+  currentQuestion,
+  totalQuestions,
+  onNavigate,
+  questions,
+  isAnswered
 }) => {
   const handlePrevious = () => {
     if (currentQuestion > 0) {
@@ -18,40 +19,42 @@ const PreviewNavigation = ({
     }
   };
 
+  const getChipClass = (q, index) => {
+    if (index === currentQuestion) return 'question-chip active';
+    if (isAnswered && isAnswered(q)) return 'question-chip answered';
+    return 'question-chip';
+  };
+
   return (
     <div className="preview-navigation">
       <div className="nav-controls">
-        <button 
+        <button
           className="nav-arrow"
           onClick={handlePrevious}
           disabled={currentQuestion === 0}
         >
           ‹
         </button>
-        
+
         <div className="question-chips">
           {questions.map((q, index) => (
             <button
               key={q.questionId}
-              className={`question-chip ${index === currentQuestion ? 'active' : ''}`}
+              className={getChipClass(q, index)}
               onClick={() => onNavigate(index)}
             >
               {q.questionId}
             </button>
           ))}
         </div>
-        
-        <button 
+
+        <button
           className="nav-arrow"
           onClick={handleNext}
           disabled={currentQuestion === totalQuestions - 1}
         >
           ›
         </button>
-      </div>
-      
-      <div className="progress-indicator">
-        Q{currentQuestion + 1} / {totalQuestions}
       </div>
     </div>
   );

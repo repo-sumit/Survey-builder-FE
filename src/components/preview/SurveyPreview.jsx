@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { surveyAPI, questionAPI } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import PreviewNavigation from './PreviewNavigation';
 import QuestionRenderer from './QuestionRenderer';
 
 const SurveyPreview = () => {
   const { surveyId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
   const [survey, setSurvey] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -16,18 +19,14 @@ const SurveyPreview = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [validationError, setValidationError] = useState('');
+  // 'language-select' | 'survey' | 'completed'
+  const [phase, setPhase] = useState('language-select');
 
   useEffect(() => {
     setCurrentQuestionIndex(0);
     loadSurveyData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surveyId]);
-
-  useEffect(() => {
-    if (currentQuestionIndex >= questions.length && questions.length > 0) {
-      setCurrentQuestionIndex(0);
-    }
-  }, [currentQuestionIndex, questions.length]);
 
   const parseAvailableLanguages = (mediums) => {
     if (Array.isArray(mediums)) {
@@ -44,12 +43,10 @@ const SurveyPreview = () => {
       const cleaned = String(questionId || '').replace(/^Q/i, '');
       return cleaned.split('.').map((part) => Number.parseInt(part, 10)).filter((num) => !Number.isNaN(num));
     };
-
     return [...list].sort((a, b) => {
       const aParts = parseSegments(a.questionId);
       const bParts = parseSegments(b.questionId);
       const maxLen = Math.max(aParts.length, bParts.length);
-
       for (let i = 0; i < maxLen; i += 1) {
         const aVal = aParts[i];
         const bVal = bParts[i];
@@ -57,7 +54,6 @@ const SurveyPreview = () => {
         if (bVal === undefined) return 1;
         if (aVal !== bVal) return aVal - bVal;
       }
-
       return 0;
     });
   };
@@ -67,15 +63,22 @@ const SurveyPreview = () => {
       setLoading(true);
       const surveyData = await surveyAPI.getById(surveyId);
       const questionsData = await questionAPI.getAll(surveyId);
-      
+
       setSurvey(surveyData);
       setQuestions(sortQuestions(questionsData));
       setAnswers({});
 
       const languages = parseAvailableLanguages(surveyData.availableMediums);
-      setAvailableLanguages(languages.length > 0 ? languages : ['English']);
-      setSelectedLanguage((prev) => (languages.includes(prev) ? prev : (languages[0] || 'English')));
-      
+      const finalLanguages = languages.length > 0 ? languages : ['English'];
+      setAvailableLanguages(finalLanguages);
+      setSelectedLanguage(finalLanguages[0] || 'English');
+
+      if (finalLanguages.length <= 1) {
+        setPhase('survey');
+      } else {
+        setPhase('language-select');
+      }
+
       setError(null);
     } catch (err) {
       setError('Failed to load survey data');
@@ -94,15 +97,8 @@ const SurveyPreview = () => {
     setValidationError('');
   };
 
-  const handleLanguageChange = (e) => {
-    setSelectedLanguage(e.target.value);
-  };
-
   const handleAnswer = (questionId, answer) => {
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: answer
-    }));
+    setAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
   const getQuestionOptions = (question) => {
@@ -113,17 +109,13 @@ const SurveyPreview = () => {
   };
 
   const isChildTriggered = (parentQuestion, parentAnswer, childQuestionId) => {
-    if (!parentQuestion || !parentAnswer) {
-      return false;
-    }
-
+    if (!parentQuestion || !parentAnswer) return false;
     const options = getQuestionOptions(parentQuestion);
     const selectedIndices = Array.isArray(parentAnswer.value)
       ? parentAnswer.value
       : parentAnswer.value !== null && parentAnswer.value !== undefined
         ? [parentAnswer.value]
         : [];
-
     return selectedIndices.some((index) => {
       const option = options[index];
       if (!option || !option.children) return false;
@@ -134,13 +126,12 @@ const SurveyPreview = () => {
 
   const visibleQuestions = useMemo(() => {
     return questions.filter((question) => {
-      if (!question.sourceQuestion) {
-        return true;
-      }
+      if (!question.sourceQuestion) return true;
       const parent = questions.find(q => q.questionId === question.sourceQuestion);
       const parentAnswer = answers[question.sourceQuestion];
       return isChildTriggered(parent, parentAnswer, question.questionId);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, answers, effectiveLanguage]);
 
   useEffect(() => {
@@ -152,30 +143,23 @@ const SurveyPreview = () => {
   const isAnswered = (question) => {
     const answer = answers[question.questionId];
     if (!answer) return false;
-    if (typeof answer.answered === 'boolean') {
-      return answer.answered;
-    }
-    if (Array.isArray(answer.value)) {
-      return answer.value.length > 0;
-    }
+    if (typeof answer.answered === 'boolean') return answer.answered;
+    if (Array.isArray(answer.value)) return answer.value.length > 0;
     return answer.value !== null && answer.value !== undefined && String(answer.value).trim() !== '';
   };
 
   const handleSubmitCurrent = () => {
     const current = visibleQuestions[currentQuestionIndex];
-    if (!current) {
-      return;
-    }
+    if (!current) return;
     if (current.isMandatory === 'Yes' && !isAnswered(current)) {
       setValidationError('Please answer this question before continuing.');
       return;
     }
     setValidationError('');
-
     if (currentQuestionIndex < visibleQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     } else {
-      alert('Preview completed. You have reached the end of the survey.');
+      setPhase('completed');
     }
   };
 
@@ -187,7 +171,7 @@ const SurveyPreview = () => {
     return (
       <div className="error-container">
         <div className="error-message">{error}</div>
-        <button className="btn btn-primary btn-cta btn-icon-back" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
+        <button className="btn btn-primary" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
           Back to Questions
         </button>
       </div>
@@ -198,80 +182,145 @@ const SurveyPreview = () => {
     return (
       <div className="empty-state">
         <p>No questions available for preview</p>
-        <button className="btn btn-primary btn-cta btn-icon-back" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
+        <button className="btn btn-primary" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
           Back to Questions
         </button>
       </div>
     );
   }
 
+  // ── Language selection screen ──────────────────────────────────────────────
+  if (phase === 'language-select') {
+    return (
+      <div className="preview-lang-select-page">
+        <div className="preview-lang-card">
+          <h2 className="preview-lang-survey-name">{survey?.surveyName}</h2>
+          {survey?.surveyDescription && (
+            <p className="preview-lang-survey-desc">{survey.surveyDescription}</p>
+          )}
+          <p className="preview-lang-prompt">Please select your preferred language to begin the survey.</p>
+          <div className="preview-lang-options">
+            {availableLanguages.map(lang => (
+              <button
+                key={lang}
+                className={`preview-lang-btn ${selectedLanguage === lang ? 'selected' : ''}`}
+                onClick={() => setSelectedLanguage(lang)}
+              >
+                {lang}
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn btn-primary preview-lang-start-btn"
+            onClick={() => setPhase('survey')}
+          >
+            Start Survey
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Survey completed screen ────────────────────────────────────────────────
+  if (phase === 'completed') {
+    return (
+      <div className="preview-completed-page">
+        <div className="preview-completed-card">
+          <div className="preview-completed-checkmark">✓</div>
+          <h2 className="preview-completed-title">Survey Completed</h2>
+          <p className="preview-completed-desc">
+            You have successfully completed the preview of <strong>{survey?.surveyName}</strong>.
+          </p>
+          <div className="preview-completed-actions">
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate(`/surveys/${surveyId}/questions`)}
+            >
+              Go to Question Master
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setAnswers({});
+                setCurrentQuestionIndex(0);
+                setPhase(availableLanguages.length > 1 ? 'language-select' : 'survey');
+              }}
+            >
+              Restart Preview
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main survey screen ─────────────────────────────────────────────────────
   const currentQuestion = visibleQuestions[currentQuestionIndex];
 
   return (
     <div className="survey-preview-container">
-      <div className="preview-header">
-        <div className="preview-title-section">
-          <h1>{survey?.surveyName || 'Survey Preview'}</h1>
-          <p className="preview-description">{survey?.surveyDescription || ''}</p>
+      {/* Survey Info Header */}
+      <div className="preview-info-header">
+        <div className="preview-info-cell">
+          <span className="preview-info-label">Survey Name</span>
+          <span className="preview-info-value">{survey?.surveyName}</span>
         </div>
-        
-        <div className="preview-controls">
-          {availableLanguages.length > 1 && (
-            <div className="language-selector">
-              <label>Preview Language: </label>
-              <select 
-                value={effectiveLanguage} 
-                onChange={handleLanguageChange}
-                className="language-dropdown"
-              >
-                {availableLanguages.map((lang) => (
-                  <option key={lang} value={lang}>{lang}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          <button 
-            className="btn btn-secondary btn-cta btn-icon-back"
-            onClick={() => navigate(`/surveys/${surveyId}/questions`)}
-          >
-            Back to Questions
-          </button>
+        <div className="preview-info-cell">
+          <span className="preview-info-label">Survey ID</span>
+          <span className="preview-info-value">{survey?.surveyId || surveyId}</span>
+        </div>
+        <div className="preview-info-cell">
+          <span className="preview-info-label">User ID</span>
+          <span className="preview-info-value">{user?.username || '-'}</span>
+        </div>
+        <div className="preview-info-cell">
+          <span className="preview-info-label">Employee Name</span>
+          <span className="preview-info-value">{user?.name || user?.username || '-'}</span>
         </div>
       </div>
 
+      {/* Navigation */}
       <PreviewNavigation
         currentQuestion={currentQuestionIndex}
         totalQuestions={visibleQuestions.length}
         onNavigate={handleNavigate}
         questions={visibleQuestions}
+        answeredQuestions={answers}
+        isAnswered={isAnswered}
       />
 
+      {/* Question Content */}
       <div className="preview-content">
         {validationError && (
           <div className="error-message" style={{ marginBottom: '1rem' }}>
             {validationError}
           </div>
         )}
-        <QuestionRenderer 
+        <QuestionRenderer
           key={currentQuestion?.questionId || 'preview-question'}
-          question={currentQuestion} 
+          question={currentQuestion}
           language={effectiveLanguage}
           answer={answers[currentQuestion?.questionId]}
           onAnswer={handleAnswer}
         />
         <div className="preview-cta">
           <button
-            className={`btn btn-primary btn-cta ${currentQuestionIndex < visibleQuestions.length - 1 ? 'btn-icon-next' : 'btn-icon-finish'}`}
-            onClick={handleSubmitCurrent}
+            className="preview-prev-link"
+            onClick={() => {
+              if (currentQuestionIndex > 0) {
+                setCurrentQuestionIndex(prev => prev - 1);
+                setValidationError('');
+              }
+            }}
+            disabled={currentQuestionIndex === 0}
           >
-            {currentQuestionIndex < visibleQuestions.length - 1 ? 'Submit & Next' : 'Finish Preview'}
+            Previous
           </button>
           <button
-            className="btn btn-secondary btn-cta btn-icon-back"
-            onClick={() => navigate(`/surveys/${surveyId}/questions`)}
+            className="btn btn-primary preview-save-continue-btn"
+            onClick={handleSubmitCurrent}
           >
-            Back to Questions
+            {currentQuestionIndex < visibleQuestions.length - 1 ? 'Save and Continue' : 'Submit Survey'}
           </button>
         </div>
       </div>

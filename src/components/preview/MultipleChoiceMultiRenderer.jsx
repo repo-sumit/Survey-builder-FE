@@ -9,7 +9,7 @@ const MultipleChoiceMultiRenderer = ({ question, language, value, onChange }) =>
 
   const toggleOption = (index) => {
     setSelectedOptions(prev => {
-      const next = prev.includes(index) 
+      const next = prev.includes(index)
         ? prev.filter(i => i !== index)
         : [...prev, index];
       onChange?.(next);
@@ -23,18 +23,22 @@ const MultipleChoiceMultiRenderer = ({ question, language, value, onChange }) =>
 
   return (
     <div className="multiple-choice-multi-renderer">
-      <div className="checkbox-options">
-        {options.map((option, index) => (
-          <label key={index} className="checkbox-option">
-            <input
-              type="checkbox"
-              checked={selectedOptions.includes(index)}
-              onChange={() => toggleOption(index)}
-            />
-            <span className="checkbox-label">{option.text}</span>
-          </label>
-        ))}
-      </div>
+      {options.map((option, index) => (
+        <div
+          key={index}
+          className={`mc-multi-row ${selectedOptions.includes(index) ? 'selected' : ''}`}
+          onClick={() => toggleOption(index)}
+        >
+          <span className="mc-multi-text">{option.text}</span>
+          <input
+            type="checkbox"
+            className="mc-multi-checkbox"
+            checked={selectedOptions.includes(index)}
+            onChange={() => toggleOption(index)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ))}
     </div>
   );
 };

@@ -1,38 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const MediaUploadRenderer = ({ question, onChange }) => {
+  const [fileName, setFileName] = useState('');
   const questionType = question.questionType;
-  
+
   let acceptTypes = '*';
-  let icon = '📁';
-  let label = 'Upload File';
-  
+  let uploadLabel = 'Upload File';
+
   if (questionType === 'Image Upload') {
     acceptTypes = 'image/*';
-    icon = '📷';
-    label = 'Upload Image';
+    uploadLabel = 'Upload Image';
   } else if (questionType === 'Video Upload') {
     acceptTypes = 'video/*';
-    icon = '🎥';
-    label = 'Upload Video';
+    uploadLabel = 'Upload Video';
   } else if (questionType === 'Voice Response') {
     acceptTypes = 'audio/*';
-    icon = '🎤';
-    label = 'Upload Audio';
+    uploadLabel = 'Upload Audio';
   }
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setFileName(file ? file.name : '');
+    onChange?.(file);
+  };
 
   return (
     <div className="media-upload-renderer">
-      <div className="upload-placeholder">
-        <div className="upload-icon">{icon}</div>
-        <div className="upload-label">{label}</div>
+      <label className="upload-area-label">
+        <div className="upload-area-inner">
+          <div className="upload-icon-stack">
+            <span className="upload-icon-image">🖼️</span>
+            <span className="upload-icon-video">🎬</span>
+            <div className="upload-arrow-circle">
+              <span className="upload-arrow-up">↑</span>
+            </div>
+          </div>
+          <span className="upload-tap-text">Tap to Upload</span>
+          {fileName && <span className="upload-file-name">{fileName}</span>}
+        </div>
         <input
           type="file"
           accept={acceptTypes}
-          className="upload-input"
-          onChange={(e) => onChange?.(e.target.files?.[0] || null)}
+          className="upload-file-hidden"
+          onChange={handleFileChange}
         />
-      </div>
+      </label>
+      <p className="upload-type-label">{uploadLabel}</p>
     </div>
   );
 };
