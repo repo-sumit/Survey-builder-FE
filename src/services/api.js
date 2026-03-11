@@ -290,6 +290,19 @@ export const accessSheetAPI = {
   }
 };
 
+// --- Translate API ---
+
+export const translateAPI = {
+  translate: async (text, targetLangCode) => {
+    const response = await axios.post(`${API_BASE_URL}/translate`, {
+      text,
+      source: 'en',
+      target: targetLangCode
+    });
+    return response.data.translatedText || '';
+  }
+};
+
 // --- Validation API calls ---
 
 export const validationAPI = {

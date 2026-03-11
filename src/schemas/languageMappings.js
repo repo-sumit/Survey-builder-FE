@@ -12,17 +12,21 @@ export const LANGUAGE_MAPPINGS = {
   'Punjabi': 'ਪੰਜਾਬੀ'
 };
 
-// Get native script for a language
-export const getNativeScript = (englishName) => {
-  return LANGUAGE_MAPPINGS[englishName] || englishName;
+// ISO 639-1 codes for LibreTranslate (null = not supported by LibreTranslate)
+export const LANGUAGE_ISO_CODES = {
+  'English': 'en',
+  'Hindi': 'hi',
+  'Bengali': 'bn',
+  'Assamese': 'as',
+  'Bodo': null,
+  'Gujarati': 'gu',
+  'Marathi': 'mr',
+  'Tamil': 'ta',
+  'Telugu': 'te',
+  'Punjabi': 'pa'
 };
 
-// Get all available languages
-export const getAvailableLanguages = () => {
-  return Object.keys(LANGUAGE_MAPPINGS);
-};
-
-// Check if a language is supported
-export const isLanguageSupported = (language) => {
-  return language in LANGUAGE_MAPPINGS;
-};
+export const getNativeScript = (englishName) => LANGUAGE_MAPPINGS[englishName] || englishName;
+export const getISOCode = (englishName) => LANGUAGE_ISO_CODES[englishName] ?? null;
+export const getAvailableLanguages = () => Object.keys(LANGUAGE_MAPPINGS);
+export const isLanguageSupported = (language) => language in LANGUAGE_MAPPINGS;

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { questionAPI, surveyAPI } from '../services/api';
+import { questionAPI, surveyAPI, translateAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
 import { questionTypes, textInputTypes, questionMediaTypes, yesNoOptions, getFieldsForQuestionType } from '../schemas/questionTypeSchema';
+import { getNativeScript, getISOCode } from '../schemas/languageMappings';
 
 const QuestionForm = () => {
   const navigate = useNavigate();
@@ -11,7 +12,11 @@ const QuestionForm = () => {
   const { errors, validateQuestion, setErrors } = useValidation();
 
   const [survey, setSurvey] = useState(null);
+  const [surveyLanguages, setSurveyLanguages] = useState([]);
   const [existingQuestions, setExistingQuestions] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+
+  // English / primary content lives in formData
   const [formData, setFormData] = useState({
     questionId: '',
     questionType: '',
@@ -36,40 +41,36 @@ const QuestionForm = () => {
     outcomeDescription: ''
   });
 
+  // Per-language translated content (for non-English languages only)
+  // Shape: { Hindi: { questionDescription, tableHeaderValue, tableQuestionValue, options: [{text}] }, ... }
+  const [langTranslations, setLangTranslations] = useState({});
+  const [translating, setTranslating] = useState({});     // { Hindi: true/false }
+  const [translateErrors, setTranslateErrors] = useState({}); // { Hindi: 'error msg' }
+
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [fieldConfig, setFieldConfig] = useState({});
 
+  // ─── Load data ────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    loadSurvey();
-    loadQuestions();
+    loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surveyId, questionId]);
 
   useEffect(() => {
-    if (formData.questionType) {
-      const config = getFieldsForQuestionType(formData.questionType);
-      setFieldConfig(config);
-      
-      // Auto-set values based on question type constraints
-      const updates = {};
-      if (config.textInputTypeValue) {
-        updates.textInputType = config.textInputTypeValue;
-      }
-      if (config.questionMediaTypeValue) {
-        updates.questionMediaType = config.questionMediaTypeValue;
-      }
-      if (config.isDynamic) {
-        updates.isDynamic = config.isDynamic;
-      }
-      
-      if (Object.keys(updates).length > 0) {
-        setFormData(prev => ({ ...prev, ...updates }));
-      }
+    if (!formData.questionType) return;
+    const config = getFieldsForQuestionType(formData.questionType);
+    setFieldConfig(config);
+    const updates = {};
+    if (config.textInputTypeValue) updates.textInputType = config.textInputTypeValue;
+    if (config.questionMediaTypeValue) updates.questionMediaType = config.questionMediaTypeValue;
+    if (config.isDynamic !== undefined) updates.isDynamic = config.isDynamic;
+    if (Object.keys(updates).length > 0) {
+      setFormData(prev => ({ ...prev, ...updates }));
     }
   }, [formData.questionType]);
-  
-  // Clear questionMediaLink when questionMediaType is None
+
   useEffect(() => {
     if (formData.questionMediaType === 'None' && formData.questionMediaLink) {
       setFormData(prev => ({ ...prev, questionMediaLink: '' }));
@@ -77,141 +78,130 @@ const QuestionForm = () => {
   }, [formData.questionMediaType, formData.questionMediaLink]);
 
   const parseAvailableMediums = (surveyData) => {
-    if (!surveyData) {
-      return [];
-    }
-
+    if (!surveyData) return [];
     if (Array.isArray(surveyData.availableMediums)) {
-      return surveyData.availableMediums.map(lang => String(lang).trim()).filter(Boolean);
+      return surveyData.availableMediums.map(l => String(l).trim()).filter(Boolean);
     }
-
     if (typeof surveyData.availableMediums === 'string') {
-      return surveyData.availableMediums.split(',').map(lang => lang.trim()).filter(Boolean);
+      return surveyData.availableMediums.split(',').map(l => l.trim()).filter(Boolean);
     }
-
     return [];
   };
 
-  const getDefaultMedium = (surveyData) => {
-    const mediums = parseAvailableMediums(surveyData);
-    return mediums[0] || 'English';
+  const buildEmptyLangSlots = (languages, englishOptCount, existingTranslations = {}) => {
+    const result = {};
+    languages.filter(l => l !== 'English').forEach(lang => {
+      const ex = existingTranslations[lang] || {};
+      result[lang] = {
+        questionDescription: ex.questionDescription || '',
+        tableHeaderValue: ex.tableHeaderValue || '',
+        tableQuestionValue: ex.tableQuestionValue || '',
+        options: Array.from({ length: englishOptCount }, (_, i) => ({
+          text: ex.options?.[i]?.text || ''
+        }))
+      };
+    });
+    return result;
   };
 
-  const loadSurvey = async () => {
+  const loadAll = async () => {
+    setLoadError(null);
     try {
-      const data = await surveyAPI.getById(surveyId);
-      setSurvey(data);
+      const surveyData = await surveyAPI.getById(surveyId);
+      setSurvey(surveyData);
 
-      if (!isEdit) {
-        setFormData(prev => ({
-          ...prev,
-          medium: prev.medium || getDefaultMedium(data)
-        }));
-      }
-    } catch (err) {
-      alert('Failed to load survey');
-      navigate('/');
-    }
-  };
+      const langs = parseAvailableMediums(surveyData);
+      const effectiveLangs = langs.length > 0 ? langs : ['English'];
+      setSurveyLanguages(effectiveLangs);
 
-  const loadQuestions = async () => {
-    try {
       const questions = await questionAPI.getAll(surveyId);
       setExistingQuestions(questions);
+
       if (!isEdit) {
+        setFormData(prev => ({ ...prev, medium: effectiveLangs[0] || 'English' }));
+        setLangTranslations(buildEmptyLangSlots(effectiveLangs, 0, {}));
         return;
       }
-      const question = questions.find(q => q.questionId === questionId);
-      if (question) {
-        const translations = question.translations || {};
-        const fallbackTranslation = translations.English ||
-          (question.medium ? translations[question.medium] : null) ||
-          translations[Object.keys(translations)[0]] ||
-          {};
 
-        setFormData(prev => ({
-          ...prev,
-          ...question,
-          questionDescription: question.questionDescription || fallbackTranslation.questionDescription || '',
-          options: Array.isArray(question.options) && question.options.length > 0
-            ? question.options
-            : (fallbackTranslation.options || []),
-          tableHeaderValue: question.tableHeaderValue || fallbackTranslation.tableHeaderValue || '',
-          tableQuestionValue: question.tableQuestionValue || fallbackTranslation.tableQuestionValue || '',
-          medium: question.medium || prev.medium || getDefaultMedium(survey)
-        }));
+      const question = questions.find(q => q.questionId === questionId);
+      if (!question) {
+        setLoadError('Question not found. It may have been deleted.');
+        return;
       }
+
+      // Resolve English source — prefer translations.English, fall back to top-level fields
+      const storedTranslations = question.translations || {};
+      const englishSrc = storedTranslations.English || {
+        questionDescription: question.questionDescription || '',
+        options: question.options || [],
+        tableHeaderValue: question.tableHeaderValue || '',
+        tableQuestionValue: question.tableQuestionValue || ''
+      };
+      const englishOptions = Array.isArray(englishSrc.options) && englishSrc.options.length > 0
+        ? englishSrc.options
+        : (question.options || []);
+
+      setFormData(prev => ({
+        ...prev,
+        ...question,
+        questionDescription: englishSrc.questionDescription || question.questionDescription || '',
+        options: englishOptions,
+        tableHeaderValue: englishSrc.tableHeaderValue || question.tableHeaderValue || '',
+        tableQuestionValue: englishSrc.tableQuestionValue || question.tableQuestionValue || '',
+        medium: question.medium || effectiveLangs[0] || 'English'
+      }));
+
+      setLangTranslations(buildEmptyLangSlots(effectiveLangs, englishOptions.length, storedTranslations));
     } catch (err) {
-      setExistingQuestions([]);
-      if (isEdit) {
-        alert('Failed to load question');
-        navigate(`/surveys/${surveyId}/questions`);
-      }
+      setLoadError('Failed to load data. Please go back and try again.');
     }
   };
+
+  const nonEnglishLanguages = surveyLanguages.filter(l => l !== 'English');
+
+  // ─── ID helpers ───────────────────────────────────────────────────────────
 
   const normalizeQuestionId = (value) => {
     const trimmed = String(value || '').trim();
-    if (!trimmed) {
-      return '';
-    }
-    if (/^q/i.test(trimmed)) {
-      return `Q${trimmed.slice(1)}`;
-    }
-    if (/^\d+(\.\d+)*$/.test(trimmed)) {
-      return `Q${trimmed}`;
-    }
+    if (!trimmed) return '';
+    if (/^q/i.test(trimmed)) return `Q${trimmed.slice(1)}`;
+    if (/^\d+(\.\d+)*$/.test(trimmed)) return `Q${trimmed}`;
     return trimmed;
   };
 
   const getParentQuestionId = (value) => {
     const normalized = normalizeQuestionId(value);
-    if (!normalized.includes('.')) {
-      return '';
-    }
+    if (!normalized.includes('.')) return '';
     return normalized.split('.').slice(0, -1).join('.');
   };
 
   const normalizeChildList = (value) => {
-    if (!value) {
-      return '';
-    }
-    const parts = value
-      .split(',')
-      .map(part => normalizeQuestionId(part))
-      .filter(Boolean);
-    return parts.join(', ');
+    if (!value) return '';
+    return value.split(',').map(p => normalizeQuestionId(p)).filter(Boolean).join(', ');
   };
+
+  // ─── English field handlers ────────────────────────────────────────────────
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => {
-      const normalizedValue = (name === 'questionId' || name === 'sourceQuestion')
+      const normalized = (name === 'questionId' || name === 'sourceQuestion')
         ? normalizeQuestionId(value)
         : value;
-      const next = {
-        ...prev,
-        [name]: normalizedValue
-      };
-
-      if (name === 'questionId' && normalizedValue.includes('.')) {
-        const parentId = getParentQuestionId(normalizedValue);
-        const previousParent = prev.questionId?.includes('.')
+      const next = { ...prev, [name]: normalized };
+      if (name === 'questionId' && normalized.includes('.')) {
+        const parentId = getParentQuestionId(normalized);
+        const prevParent = prev.questionId?.includes('.')
           ? prev.questionId.split('.').slice(0, -1).join('.')
           : '';
-        if (!prev.sourceQuestion || prev.sourceQuestion === previousParent) {
+        if (!prev.sourceQuestion || prev.sourceQuestion === prevParent) {
           next.sourceQuestion = parentId;
         }
       }
-
       return next;
     });
     if (errors[name]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
+      setErrors(prev => { const e = { ...prev }; delete e[name]; return e; });
     }
   };
 
@@ -219,170 +209,264 @@ const QuestionForm = () => {
     setFormData(prev => {
       const options = [...(prev.options || [])];
       const current = options[index] || { text: '', textInEnglish: '', children: '' };
-      const updated = {
-        ...current,
-        [field]: value
-      };
-
+      const updated = { ...current, [field]: value };
       if (field === 'text' && (!current.textInEnglish || current.textInEnglish === current.text)) {
         updated.textInEnglish = value;
       }
-
       options[index] = updated;
-      return {
-        ...prev,
-        options
-      };
+      return { ...prev, options };
     });
-
     if (errors.options) {
-      setErrors(prev => {
-        const nextErrors = { ...prev };
-        delete nextErrors.options;
-        return nextErrors;
-      });
+      setErrors(prev => { const e = { ...prev }; delete e.options; return e; });
     }
   };
 
   const addOption = () => {
     const maxOptions = fieldConfig?.maxOptions || 20;
     if ((formData.options || []).length >= maxOptions) {
-      alert(`Maximum ${maxOptions} options allowed`);
+      setErrors(prev => ({ ...prev, options: `Maximum ${maxOptions} options allowed` }));
       return;
     }
-
     setFormData(prev => ({
       ...prev,
       options: [...(prev.options || []), { text: '', textInEnglish: '', children: '' }]
     }));
+    // Add matching empty slot in every language
+    setLangTranslations(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(lang => {
+        updated[lang] = { ...updated[lang], options: [...(updated[lang].options || []), { text: '' }] };
+      });
+      return updated;
+    });
   };
 
   const removeOption = (index) => {
-    setFormData(prev => ({
+    setFormData(prev => ({ ...prev, options: (prev.options || []).filter((_, i) => i !== index) }));
+    setLangTranslations(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(lang => {
+        updated[lang] = { ...updated[lang], options: (updated[lang].options || []).filter((_, i) => i !== index) };
+      });
+      return updated;
+    });
+  };
+
+  // ─── Translation handlers ─────────────────────────────────────────────────
+
+  const handleTranslationChange = (lang, field, value) => {
+    setLangTranslations(prev => ({
       ...prev,
-      options: (prev.options || []).filter((_, optionIndex) => optionIndex !== index)
+      [lang]: { ...prev[lang], [field]: value }
     }));
   };
 
-  const buildQuestionPayload = () => {
-    const normalizedQuestionId = normalizeQuestionId(formData.questionId);
-    const normalizedSourceQuestion = normalizeQuestionId(formData.sourceQuestion);
-    const derivedParent = normalizedQuestionId.includes('.') ? getParentQuestionId(normalizedQuestionId) : '';
-    const resolvedSourceQuestion = normalizedSourceQuestion || derivedParent;
-    const normalizeOptions = (options = []) => options.map(option => {
-      if (!option || typeof option !== 'object') {
-        return option;
+  const handleTranslationOptionChange = (lang, index, value) => {
+    setLangTranslations(prev => {
+      const langData = { ...prev[lang] };
+      const options = [...(langData.options || [])];
+      options[index] = { ...options[index], text: value };
+      return { ...prev, [lang]: { ...langData, options } };
+    });
+  };
+
+  const translateAll = async (lang) => {
+    const isoCode = getISOCode(lang);
+    if (!isoCode) {
+      setTranslateErrors(prev => ({
+        ...prev,
+        [lang]: `Auto-translation is not available for ${lang}. Please enter the translation manually.`
+      }));
+      return;
+    }
+    if (!formData.questionDescription?.trim()) {
+      setTranslateErrors(prev => ({
+        ...prev,
+        [lang]: 'Please enter the English question description before translating.'
+      }));
+      return;
+    }
+
+    setTranslating(prev => ({ ...prev, [lang]: true }));
+    setTranslateErrors(prev => ({ ...prev, [lang]: null }));
+
+    try {
+      const updates = { ...(langTranslations[lang] || {}) };
+
+      updates.questionDescription = await translateAPI.translate(formData.questionDescription, isoCode);
+
+      if (fieldConfig.showTableFields) {
+        if (formData.tableHeaderValue?.trim()) {
+          updates.tableHeaderValue = await translateAPI.translate(formData.tableHeaderValue, isoCode);
+        }
+        if (formData.tableQuestionValue?.trim()) {
+          // Preserve the a:/b: prefix format — translate only the text after the colon
+          const lines = formData.tableQuestionValue.split('\n');
+          const translatedLines = await Promise.all(lines.map(async line => {
+            const colonIdx = line.indexOf(':');
+            if (colonIdx > -1) {
+              const prefix = line.substring(0, colonIdx + 1);
+              const text = line.substring(colonIdx + 1).trim();
+              if (text) {
+                const translated = await translateAPI.translate(text, isoCode);
+                return `${prefix}${translated}`;
+              }
+            }
+            return line;
+          }));
+          updates.tableQuestionValue = translatedLines.join('\n');
+        }
       }
-      return {
-        ...option,
-        children: normalizeChildList(option.children || '')
+
+      if (fieldConfig.showOptions && formData.options?.length > 0) {
+        const translatedOptions = await Promise.all(
+          formData.options.map(async (opt, i) => {
+            const text = opt.text?.trim();
+            if (!text) return langTranslations[lang]?.options?.[i] || { text: '' };
+            const translated = await translateAPI.translate(text, isoCode);
+            return { text: translated };
+          })
+        );
+        updates.options = translatedOptions;
+      }
+
+      setLangTranslations(prev => ({ ...prev, [lang]: updates }));
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || `Failed to translate to ${lang}`;
+      setTranslateErrors(prev => ({ ...prev, [lang]: msg }));
+    } finally {
+      setTranslating(prev => ({ ...prev, [lang]: false }));
+    }
+  };
+
+  // ─── Payload builder ──────────────────────────────────────────────────────
+
+  const buildQuestionPayload = () => {
+    const normalizedId = normalizeQuestionId(formData.questionId);
+    const normalizedSource = normalizeQuestionId(formData.sourceQuestion);
+    const derivedParent = normalizedId.includes('.') ? getParentQuestionId(normalizedId) : '';
+    const resolvedSource = normalizedSource || derivedParent;
+
+    const normalizeOptions = (opts = []) => opts.map(opt => {
+      if (!opt || typeof opt !== 'object') return opt;
+      return { ...opt, children: normalizeChildList(opt.children || '') };
+    });
+
+    const englishOptions = normalizeOptions(formData.options || []);
+
+    // Build translations for all survey languages
+    const translations = {
+      English: {
+        questionDescription: formData.questionDescription || '',
+        tableHeaderValue: formData.tableHeaderValue || '',
+        tableQuestionValue: formData.tableQuestionValue || '',
+        options: englishOptions
+      }
+    };
+
+    nonEnglishLanguages.forEach(lang => {
+      const langData = langTranslations[lang] || {};
+      translations[lang] = {
+        questionDescription: langData.questionDescription || formData.questionDescription || '',
+        tableHeaderValue: langData.tableHeaderValue || formData.tableHeaderValue || '',
+        tableQuestionValue: langData.tableQuestionValue || formData.tableQuestionValue || '',
+        options: englishOptions.map((opt, i) => ({
+          text: langData.options?.[i]?.text || opt.text || '',
+          textInEnglish: opt.text || opt.textInEnglish || '',
+          children: opt.children || ''
+        }))
       };
     });
 
     return {
       ...formData,
-      questionId: normalizedQuestionId,
-      sourceQuestion: resolvedSourceQuestion,
-      options: normalizeOptions(formData.options || []),
-      medium: formData.medium || getDefaultMedium(survey)
+      questionId: normalizedId,
+      sourceQuestion: resolvedSource,
+      options: englishOptions,
+      medium: surveyLanguages[0] || 'English',
+      translations
     };
   };
 
-  const getOptionsForQuestion = (question, fallbackLanguage) => {
-    if (Array.isArray(question.options) && question.options.length > 0) {
-      return question.options;
-    }
+  // ─── Validation helpers ───────────────────────────────────────────────────
 
-    const translations = question.translations || {};
-    if (fallbackLanguage && translations[fallbackLanguage]?.options) {
-      return translations[fallbackLanguage].options;
-    }
-    if (translations.English?.options) {
-      return translations.English.options;
-    }
-
-    const firstLanguage = Object.keys(translations)[0];
-    return translations[firstLanguage]?.options || [];
+  const getOptionsForQuestion = (question) => {
+    if (Array.isArray(question.options) && question.options.length > 0) return question.options;
+    const t = question.translations || {};
+    if (t.English?.options) return t.English.options;
+    const first = Object.keys(t)[0];
+    return t[first]?.options || [];
   };
 
-  const getChildMappingConflicts = (questions, fallbackLanguage) => {
+  const getChildMappingConflicts = (questions) => {
     const seen = new Map();
     const conflicts = new Set();
-
-    questions.forEach(question => {
-      const options = getOptionsForQuestion(question, fallbackLanguage);
-      options.forEach((option, optionIndex) => {
-        const children = normalizeChildList(option?.children || '')
-          .split(',')
-          .map(child => child.trim())
-          .filter(Boolean);
-        const uniqueChildren = new Set(children);
-        uniqueChildren.forEach(childId => {
+    questions.forEach(q => {
+      getOptionsForQuestion(q).forEach((opt, optIdx) => {
+        normalizeChildList(opt?.children || '').split(',').map(c => c.trim()).filter(Boolean).forEach(childId => {
           const existing = seen.get(childId);
-          if (existing && (existing.questionId !== question.questionId || existing.optionIndex !== optionIndex)) {
+          if (existing && (existing.qId !== q.questionId || existing.optIdx !== optIdx)) {
             conflicts.add(childId);
           } else {
-            seen.set(childId, { questionId: question.questionId, optionIndex });
+            seen.set(childId, { qId: q.questionId, optIdx });
           }
         });
       });
     });
-
     return Array.from(conflicts);
   };
+
+  // ─── Submit ───────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError(null);
     setErrors({});
 
-    // Validate required basic fields
-    if (!formData.questionId || !formData.questionId.trim()) {
-      setSubmitError('Question ID is required');
+    if (!formData.questionId?.trim()) {
       setErrors({ questionId: 'Question ID is required' });
+      setSubmitError('Question ID is required');
       return;
     }
-    if (!formData.questionType || formData.questionType === '') {
-      setSubmitError('Question Type is required');
+    if (!formData.questionType) {
       setErrors({ questionType: 'Question Type is required' });
+      setSubmitError('Question Type is required');
       return;
     }
-
     if (fieldConfig.showOptions && (!formData.options || formData.options.length < 2)) {
-      setSubmitError('At least 2 options are required');
       setErrors({ options: 'At least 2 options are required' });
+      setSubmitError('At least 2 options are required');
       return;
     }
 
     const payload = buildQuestionPayload();
 
-    const parentId = payload.questionId.includes('.') ? (payload.sourceQuestion || getParentQuestionId(payload.questionId)) : '';
     if (payload.questionId.includes('.')) {
+      const parentId = payload.sourceQuestion || getParentQuestionId(payload.questionId);
       if (!parentId) {
-        setSubmitError('Child questions must have a parent question.');
         setErrors({ sourceQuestion: 'Source Question is required for child questions' });
+        setSubmitError('Child questions must have a parent question.');
         return;
       }
-      const parentQuestion = existingQuestions.find(q => q.surveyId === surveyId && q.questionId === parentId);
-      if (parentQuestion && parentQuestion.questionType !== 'Multiple Choice Single Select') {
-        setSubmitError('Only Multiple Choice Single Select questions can have child questions. Change the Question ID or parent.');
+      const parentQ = existingQuestions.find(q => q.surveyId === surveyId && q.questionId === parentId);
+      if (parentQ && parentQ.questionType !== 'Multiple Choice Single Select') {
         setErrors({ questionId: 'Child questions can only belong to Multiple Choice Single Select questions.' });
+        setSubmitError('Only Multiple Choice Single Select questions can have child questions. Change the Question ID or parent.');
         return;
       }
     }
 
-    const validationQuestions = [
+    const forConflictCheck = [
       ...existingQuestions.filter(q => q.surveyId === surveyId && q.questionId !== payload.questionId),
       payload
     ];
-    const conflictChildren = getChildMappingConflicts(validationQuestions, payload.medium);
+    const conflictChildren = getChildMappingConflicts(forConflictCheck);
     if (conflictChildren.length > 0) {
-      setSubmitError(`Child question IDs cannot be mapped to multiple options/questions: ${conflictChildren.join(', ')}`);
       setErrors({ options: 'Child question IDs must be unique across all options.' });
+      setSubmitError(`Child question IDs cannot be mapped to multiple options/questions: ${conflictChildren.join(', ')}`);
       return;
     }
 
-    // Run full validation
     if (!validateQuestion(payload, payload.questionType)) {
       setSubmitError('Please fix all validation errors before submitting');
       return;
@@ -392,57 +476,59 @@ const QuestionForm = () => {
       setLoading(true);
       if (isEdit) {
         await questionAPI.update(surveyId, questionId, payload);
-        // Store the edited question ID for scroll restore
         sessionStorage.setItem('lastEditedQuestionId', questionId);
-        alert('✓ Question updated successfully');
       } else {
         await questionAPI.create(surveyId, payload);
-        // Store the newly created question ID for scroll restore
         sessionStorage.setItem('lastEditedQuestionId', payload.questionId);
-        alert('✓ Question added successfully! You can add more questions or preview the survey.');
       }
       navigate(`/surveys/${surveyId}/questions`);
     } catch (err) {
-      console.error('Question submission error:', err);
-      
-      // Handle validation errors from backend
       if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
-        const errorMessages = err.response.data.errors;
-        setSubmitError(errorMessages.join('\n'));
-        
-        // Try to map errors to fields
+        const msgs = err.response.data.errors;
+        setSubmitError(msgs.join('\n'));
         const fieldErrors = {};
-        errorMessages.forEach(msg => {
-          const lowerMsg = msg.toLowerCase();
-          if (lowerMsg.includes('question id')) fieldErrors.questionId = msg;
-          else if (lowerMsg.includes('question type')) fieldErrors.questionType = msg;
-          else if (lowerMsg.includes('question description')) fieldErrors.questionDescription = msg;
-          else if (lowerMsg.includes('option')) fieldErrors.options = msg;
-          else if (lowerMsg.includes('table header')) fieldErrors.tableHeaderValue = msg;
-          else if (lowerMsg.includes('table question')) fieldErrors.tableQuestionValue = msg;
+        msgs.forEach(msg => {
+          const lc = msg.toLowerCase();
+          if (lc.includes('question id')) fieldErrors.questionId = msg;
+          else if (lc.includes('question type')) fieldErrors.questionType = msg;
+          else if (lc.includes('question description')) fieldErrors.questionDescription = msg;
+          else if (lc.includes('option')) fieldErrors.options = msg;
+          else if (lc.includes('table header')) fieldErrors.tableHeaderValue = msg;
+          else if (lc.includes('table question')) fieldErrors.tableQuestionValue = msg;
         });
         setErrors(fieldErrors);
       } else if (err.response?.data?.error) {
         setSubmitError(err.response.data.error);
-      } else if (err.message) {
-        setSubmitError(`Failed to save question: ${err.message}`);
       } else {
-        setSubmitError('Failed to save question. Please check all fields and try again.');
+        setSubmitError(`Failed to save question: ${err.message || 'Please try again.'}`);
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  if (loadError) {
+    return (
+      <div className="form-container">
+        <div className="error-message">{loadError}</div>
+        <button className="btn btn-secondary mt-3" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
+          Back to Questions
+        </button>
+      </div>
+    );
+  }
+
   if (!survey) {
-    return <div className="loading">Loading...</div>;
+    return <div className="loading">Loading…</div>;
   }
 
   return (
     <div className="form-container">
       <div className="form-header">
         <h2>{isEdit ? 'Edit Question' : 'Add New Question'}</h2>
-        <button 
+        <button
           className="btn btn-secondary btn-cta btn-icon-back"
           onClick={() => navigate(`/surveys/${surveyId}/questions`)}
         >
@@ -455,7 +541,7 @@ const QuestionForm = () => {
           <strong>Error:</strong> {submitError}
         </div>
       )}
-      
+
       {Object.keys(errors).length > 0 && (
         <div className="error-message">
           <strong>Please fix the following errors:</strong>
@@ -468,9 +554,11 @@ const QuestionForm = () => {
       )}
 
       <form onSubmit={handleSubmit} className="question-form">
+
+        {/* ── BASIC INFORMATION ── */}
         <div className="form-section">
           <h3>Basic Information</h3>
-          
+
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="questionId">
@@ -510,9 +598,18 @@ const QuestionForm = () => {
             </div>
           </div>
 
+          {surveyLanguages.length > 0 && (
+            <div className="survey-languages-hint">
+              <strong>Survey languages:</strong> {surveyLanguages.join(', ')}
+              {nonEnglishLanguages.length > 0 && (
+                <span className="ms-1">— Enter English content below, then add translations in the <em>Translations</em> section.</span>
+              )}
+            </div>
+          )}
+
           <div className="form-group">
             <label htmlFor="questionDescription">
-              Question Description <span className="required">*</span>
+              Question Description {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
             </label>
             <textarea
               id="questionDescription"
@@ -520,7 +617,7 @@ const QuestionForm = () => {
               value={formData.questionDescription}
               onChange={handleChange}
               rows="3"
-              placeholder="Enter question text"
+              placeholder="Enter question text in English"
               className={errors.questionDescription ? 'error' : ''}
             />
             {errors.questionDescription && <span className="error-text">{errors.questionDescription}</span>}
@@ -543,7 +640,7 @@ const QuestionForm = () => {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="tableHeaderValue">
-                  Table Header Value <span className="required">*</span>
+                  Table Header Value {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
                 </label>
                 <input
                   type="text"
@@ -559,7 +656,7 @@ const QuestionForm = () => {
 
               <div className="form-group">
                 <label htmlFor="tableQuestionValue">
-                  Table Question Value <span className="required">*</span>
+                  Table Question Value {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
                 </label>
                 <textarea
                   id="tableQuestionValue"
@@ -576,10 +673,9 @@ const QuestionForm = () => {
           )}
         </div>
 
-        {/* Parent/Child Question Settings */}
+        {/* ── QUESTION RELATIONSHIP ── */}
         <div className="form-section">
           <h3>Question Relationship</h3>
-          
           <div className="form-group">
             <label htmlFor="sourceQuestion">Source Question (Parent)</label>
             <input
@@ -589,19 +685,24 @@ const QuestionForm = () => {
               value={formData.sourceQuestion}
               onChange={handleChange}
               placeholder="e.g., 1 (for child questions)"
+              className={errors.sourceQuestion ? 'error' : ''}
             />
+            {errors.sourceQuestion && <span className="error-text">{errors.sourceQuestion}</span>}
             <small>Only required for child questions (e.g., 1.1, 1.2)</small>
           </div>
         </div>
 
+        {/* ── OPTIONS (English) ── */}
         {fieldConfig.showOptions && (
           <div className="form-section">
-            <h3>Options</h3>
+            <h3>Options {nonEnglishLanguages.length > 0 ? '(English)' : ''}</h3>
             {errors.options && <span className="error-text">{errors.options}</span>}
 
             <div className="options-table" style={{ marginTop: '0.625rem' }}>
               <div className="options-table-row options-table-header">
-                <div className="options-table-cell options-table-label">Option Text</div>
+                <div className="options-table-cell options-table-label">
+                  Option Text {nonEnglishLanguages.length > 0 ? '(English)' : ''}
+                </div>
                 {fieldConfig.showOptionChildren && (
                   <div className="options-table-cell options-table-label">Child Questions</div>
                 )}
@@ -655,22 +756,15 @@ const QuestionForm = () => {
           </div>
         )}
 
-        {/* Settings */}
+        {/* ── SETTINGS ── */}
         <div className="form-section">
           <h3>Settings</h3>
-          
+
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="isMandatory">Is Mandatory</label>
-              <select
-                id="isMandatory"
-                name="isMandatory"
-                value={formData.isMandatory}
-                onChange={handleChange}
-              >
-                {yesNoOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
+              <select id="isMandatory" name="isMandatory" value={formData.isMandatory} onChange={handleChange}>
+                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             </div>
 
@@ -683,21 +777,14 @@ const QuestionForm = () => {
                 onChange={handleChange}
                 disabled={fieldConfig.isDynamic !== undefined}
               >
-                {yesNoOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
+                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
-              {fieldConfig.isDynamic && <small>Auto-set based on question type</small>}
+              {fieldConfig.isDynamic !== undefined && <small>Auto-set based on question type</small>}
             </div>
 
             <div className="form-group">
               <label htmlFor="mode">Mode</label>
-              <select
-                id="mode"
-                name="mode"
-                value={formData.mode}
-                onChange={handleChange}
-              >
+              <select id="mode" name="mode" value={formData.mode} onChange={handleChange}>
                 <option value="None">None</option>
                 <option value="New Data">New Data</option>
                 <option value="Correction">Correction</option>
@@ -715,11 +802,9 @@ const QuestionForm = () => {
                   name="textInputType"
                   value={formData.textInputType}
                   onChange={handleChange}
-                  disabled={fieldConfig.textInputTypeValue}
+                  disabled={Boolean(fieldConfig.textInputTypeValue)}
                 >
-                  {textInputTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
+                  {textInputTypes.map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
 
@@ -743,25 +828,11 @@ const QuestionForm = () => {
             <div className="form-row">
               <div className="form-group">
                 <label htmlFor="minValue">Min Value</label>
-                <input
-                  type="text"
-                  id="minValue"
-                  name="minValue"
-                  value={formData.minValue}
-                  onChange={handleChange}
-                  placeholder="Minimum value"
-                />
+                <input type="text" id="minValue" name="minValue" value={formData.minValue} onChange={handleChange} placeholder="Minimum value" />
               </div>
               <div className="form-group">
                 <label htmlFor="maxValue">Max Value</label>
-                <input
-                  type="text"
-                  id="maxValue"
-                  name="maxValue"
-                  value={formData.maxValue}
-                  onChange={handleChange}
-                  placeholder="Maximum value"
-                />
+                <input type="text" id="maxValue" name="maxValue" value={formData.maxValue} onChange={handleChange} placeholder="Maximum value" />
               </div>
             </div>
           )}
@@ -774,11 +845,9 @@ const QuestionForm = () => {
                 name="questionMediaType"
                 value={formData.questionMediaType}
                 onChange={handleChange}
-                disabled={fieldConfig.questionMediaTypeValue}
+                disabled={Boolean(fieldConfig.questionMediaTypeValue)}
               >
-                {questionMediaTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
+                {questionMediaTypes.map(type => <option key={type} value={type}>{type}</option>)}
               </select>
             </div>
 
@@ -793,27 +862,126 @@ const QuestionForm = () => {
                 placeholder="URL to media file"
                 disabled={formData.questionMediaType === 'None'}
               />
-              {formData.questionMediaType === 'None' && (
-                <small>Disabled when Media Type is None</small>
-              )}
+              {formData.questionMediaType === 'None' && <small>Disabled when Media Type is None</small>}
             </div>
           </div>
         </div>
 
+        {/* ── TRANSLATIONS ── */}
+        {nonEnglishLanguages.length > 0 && (
+          <div className="form-section">
+            <h3>Translations</h3>
+            <p className="translation-section-hint">
+              Provide the question content in other survey languages. Use "Auto-translate" to fill from English automatically, then review and adjust as needed.
+            </p>
+
+            {nonEnglishLanguages.map(lang => (
+              <div key={lang} className="translation-lang-card">
+                <div className="translation-lang-header">
+                  <div className="translation-lang-title">
+                    <strong>{lang}</strong>
+                    <span className="translation-native-script">({getNativeScript(lang)})</span>
+                  </div>
+                  <div className="translation-lang-actions">
+                    {getISOCode(lang) ? (
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${translating[lang] ? 'btn-secondary' : 'btn-secondary'}`}
+                        onClick={() => translateAll(lang)}
+                        disabled={translating[lang] || !formData.questionDescription?.trim()}
+                        title={!formData.questionDescription?.trim() ? 'Enter English description first' : `Auto-translate all fields to ${lang}`}
+                      >
+                        {translating[lang] ? '⟳ Translating…' : '↻ Auto-translate from English'}
+                      </button>
+                    ) : (
+                      <span className="badge translation-manual-badge">Manual entry only</span>
+                    )}
+                  </div>
+                </div>
+
+                {translateErrors[lang] && (
+                  <div className="error-message translation-error">
+                    {translateErrors[lang]}
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label>Description in {lang}</label>
+                  <textarea
+                    value={langTranslations[lang]?.questionDescription || ''}
+                    onChange={(e) => handleTranslationChange(lang, 'questionDescription', e.target.value)}
+                    rows="3"
+                    placeholder={`Question text in ${lang}…`}
+                  />
+                </div>
+
+                {fieldConfig.showTableFields && (
+                  <>
+                    <div className="form-group">
+                      <label>Table Header in {lang}</label>
+                      <input
+                        type="text"
+                        value={langTranslations[lang]?.tableHeaderValue || ''}
+                        onChange={(e) => handleTranslationChange(lang, 'tableHeaderValue', e.target.value)}
+                        placeholder={`Table header in ${lang}…`}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Table Questions in {lang}</label>
+                      <textarea
+                        value={langTranslations[lang]?.tableQuestionValue || ''}
+                        onChange={(e) => handleTranslationChange(lang, 'tableQuestionValue', e.target.value)}
+                        rows="4"
+                        placeholder={'Format:\na:Question 1\nb:Question 2'}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {fieldConfig.showOptions && (formData.options || []).length > 0 && (
+                  <div className="form-group">
+                    <label>Options in {lang}</label>
+                    <div className="translation-options-grid">
+                      <div className="translation-options-header">
+                        <span>English</span>
+                        <span>{lang} ({getNativeScript(lang)})</span>
+                      </div>
+                      {(formData.options || []).map((opt, i) => (
+                        <div key={i} className="translation-option-row">
+                          <span className="translation-option-source">
+                            {opt.text || <em style={{ opacity: 0.5 }}>Option {i + 1}</em>}
+                          </span>
+                          <input
+                            type="text"
+                            value={langTranslations[lang]?.options?.[i]?.text || ''}
+                            onChange={(e) => handleTranslationOptionChange(lang, i, e.target.value)}
+                            placeholder={`${lang} translation`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── FORM ACTIONS ── */}
         <div className="form-actions">
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="btn btn-secondary btn-cta btn-icon-cancel"
             onClick={() => navigate(`/surveys/${surveyId}/questions`)}
           >
             Cancel
           </button>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className={`btn btn-primary btn-cta ${isEdit ? 'btn-icon-update' : 'btn-icon-add'}`}
             disabled={loading}
           >
-            {loading ? 'Saving...' : (isEdit ? 'Update Question' : 'Add Question')}
+            {loading ? 'Saving…' : (isEdit ? 'Update Question' : 'Add Question')}
           </button>
         </div>
       </form>
