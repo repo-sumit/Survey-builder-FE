@@ -5,6 +5,29 @@ import { useValidation } from '../hooks/useValidation';
 import { questionTypes, textInputTypes, questionMediaTypes, yesNoOptions, getFieldsForQuestionType } from '../schemas/questionTypeSchema';
 import { getNativeScript, getISOCode } from '../schemas/languageMappings';
 
+const TABLE_QUESTION_MAX = 20;
+const getRowLabel = (i) => String.fromCharCode(97 + i);
+
+const parseTableHeaders = (str) => {
+  if (!str) return ['', ''];
+  const parts = str.split(',').map(h => h.trim());
+  return [parts[0] || '', parts[1] || ''];
+};
+
+const parseTableQuestions = (str) => {
+  if (!str) return [{ text: '' }];
+  const rows = str.split('\n').map(line => {
+    const idx = line.indexOf(':');
+    return { text: idx > -1 ? line.substring(idx + 1).trim() : line.trim() };
+  });
+  return rows.length > 0 ? rows : [{ text: '' }];
+};
+
+const formatTableHeaders = (headers) => headers.filter(h => h?.trim()).join(', ');
+
+const formatTableQuestions = (questions) =>
+  questions.map((q, i) => `${getRowLabel(i)}:${q.text}`).join('\n');
+
 const QuestionForm = () => {
   const navigate = useNavigate();
   const { surveyId, questionId } = useParams();
@@ -41,8 +64,11 @@ const QuestionForm = () => {
     outcomeDescription: ''
   });
 
+  const [tableHeaders, setTableHeaders] = useState(['', '']);
+  const [tableQuestions, setTableQuestions] = useState([{ text: '' }]);
+
   // Per-language translated content (for non-English languages only)
-  // Shape: { Hindi: { questionDescription, tableHeaderValue, tableQuestionValue, options: [{text}] }, ... }
+  // Shape: { Hindi: { questionDescription, tableHeaders: ['',''], tableQuestions: [{text}], options: [{text}] }, ... }
   const [langTranslations, setLangTranslations] = useState({});
   const [translating, setTranslating] = useState({});     // { Hindi: true/false }
   const [translateErrors, setTranslateErrors] = useState({}); // { Hindi: 'error msg' }
@@ -88,14 +114,18 @@ const QuestionForm = () => {
     return [];
   };
 
-  const buildEmptyLangSlots = (languages, englishOptCount, existingTranslations = {}) => {
+  const buildEmptyLangSlots = (languages, englishOptCount, existingTranslations = {}, existingTableQCount = 1) => {
     const result = {};
     languages.filter(l => l !== 'English').forEach(lang => {
       const ex = existingTranslations[lang] || {};
+      const exHeaders = ex.tableHeaders || parseTableHeaders(ex.tableHeaderValue || '');
+      const exQuestions = ex.tableQuestions || parseTableQuestions(ex.tableQuestionValue || '');
       result[lang] = {
         questionDescription: ex.questionDescription || '',
-        tableHeaderValue: ex.tableHeaderValue || '',
-        tableQuestionValue: ex.tableQuestionValue || '',
+        tableHeaders: [exHeaders[0] || '', exHeaders[1] || ''],
+        tableQuestions: Array.from({ length: existingTableQCount }, (_, i) => ({
+          text: exQuestions[i]?.text || ''
+        })),
         options: Array.from({ length: englishOptCount }, (_, i) => ({
           text: ex.options?.[i]?.text || ''
         }))
@@ -119,7 +149,9 @@ const QuestionForm = () => {
 
       if (!isEdit) {
         setFormData(prev => ({ ...prev, medium: effectiveLangs[0] || 'English' }));
-        setLangTranslations(buildEmptyLangSlots(effectiveLangs, 0, {}));
+        setTableHeaders(['', '']);
+        setTableQuestions([{ text: '' }]);
+        setLangTranslations(buildEmptyLangSlots(effectiveLangs, 0, {}, 1));
         return;
       }
 
@@ -141,17 +173,21 @@ const QuestionForm = () => {
         ? englishSrc.options
         : (question.options || []);
 
+      const parsedHeaders = parseTableHeaders(englishSrc.tableHeaderValue || question.tableHeaderValue || '');
+      const parsedQuestions = parseTableQuestions(englishSrc.tableQuestionValue || question.tableQuestionValue || '');
+
+      setTableHeaders(parsedHeaders);
+      setTableQuestions(parsedQuestions);
+
       setFormData(prev => ({
         ...prev,
         ...question,
         questionDescription: englishSrc.questionDescription || question.questionDescription || '',
         options: englishOptions,
-        tableHeaderValue: englishSrc.tableHeaderValue || question.tableHeaderValue || '',
-        tableQuestionValue: englishSrc.tableQuestionValue || question.tableQuestionValue || '',
         medium: question.medium || effectiveLangs[0] || 'English'
       }));
 
-      setLangTranslations(buildEmptyLangSlots(effectiveLangs, englishOptions.length, storedTranslations));
+      setLangTranslations(buildEmptyLangSlots(effectiveLangs, englishOptions.length, storedTranslations, parsedQuestions.length));
     } catch (err) {
       setLoadError('Failed to load data. Please go back and try again.');
     }
@@ -252,6 +288,64 @@ const QuestionForm = () => {
     });
   };
 
+  // ─── Table header / question handlers ────────────────────────────────────
+
+  const handleTableHeaderChange = (index, value) => {
+    setTableHeaders(prev => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const handleTableQuestionChange = (index, value) => {
+    setTableQuestions(prev => {
+      const next = [...prev];
+      next[index] = { text: value };
+      return next;
+    });
+  };
+
+  const addTableQuestion = () => {
+    if (tableQuestions.length >= TABLE_QUESTION_MAX) return;
+    setTableQuestions(prev => [...prev, { text: '' }]);
+    setLangTranslations(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(lang => {
+        updated[lang] = { ...updated[lang], tableQuestions: [...(updated[lang].tableQuestions || []), { text: '' }] };
+      });
+      return updated;
+    });
+  };
+
+  const removeTableQuestion = (index) => {
+    if (tableQuestions.length <= 1) return;
+    setTableQuestions(prev => prev.filter((_, i) => i !== index));
+    setLangTranslations(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(lang => {
+        updated[lang] = { ...updated[lang], tableQuestions: (updated[lang].tableQuestions || []).filter((_, i) => i !== index) };
+      });
+      return updated;
+    });
+  };
+
+  const handleTranslationTableHeaderChange = (lang, index, value) => {
+    setLangTranslations(prev => {
+      const headers = [...(prev[lang]?.tableHeaders || ['', ''])];
+      headers[index] = value;
+      return { ...prev, [lang]: { ...prev[lang], tableHeaders: headers } };
+    });
+  };
+
+  const handleTranslationTableQuestionChange = (lang, index, value) => {
+    setLangTranslations(prev => {
+      const questions = [...(prev[lang]?.tableQuestions || [])];
+      questions[index] = { text: value };
+      return { ...prev, [lang]: { ...prev[lang], tableQuestions: questions } };
+    });
+  };
+
   // ─── Translation handlers ─────────────────────────────────────────────────
 
   const handleTranslationChange = (lang, field, value) => {
@@ -296,26 +390,15 @@ const QuestionForm = () => {
       updates.questionDescription = await translateAPI.translate(formData.questionDescription, isoCode);
 
       if (fieldConfig.showTableFields) {
-        if (formData.tableHeaderValue?.trim()) {
-          updates.tableHeaderValue = await translateAPI.translate(formData.tableHeaderValue, isoCode);
-        }
-        if (formData.tableQuestionValue?.trim()) {
-          // Preserve the a:/b: prefix format — translate only the text after the colon
-          const lines = formData.tableQuestionValue.split('\n');
-          const translatedLines = await Promise.all(lines.map(async line => {
-            const colonIdx = line.indexOf(':');
-            if (colonIdx > -1) {
-              const prefix = line.substring(0, colonIdx + 1);
-              const text = line.substring(colonIdx + 1).trim();
-              if (text) {
-                const translated = await translateAPI.translate(text, isoCode);
-                return `${prefix}${translated}`;
-              }
-            }
-            return line;
-          }));
-          updates.tableQuestionValue = translatedLines.join('\n');
-        }
+        updates.tableHeaders = await Promise.all(
+          tableHeaders.map(async h => h?.trim() ? await translateAPI.translate(h, isoCode) : h || '')
+        );
+        updates.tableQuestions = await Promise.all(
+          tableQuestions.map(async q => q.text?.trim()
+            ? { text: await translateAPI.translate(q.text, isoCode) }
+            : { text: q.text || '' }
+          )
+        );
       }
 
       if (fieldConfig.showOptions && formData.options?.length > 0) {
@@ -354,22 +437,29 @@ const QuestionForm = () => {
 
     const englishOptions = normalizeOptions(formData.options || []);
 
+    const englishTableHeaderValue = formatTableHeaders(tableHeaders);
+    const englishTableQuestionValue = formatTableQuestions(tableQuestions);
+
     // Build translations for all survey languages
     const translations = {
       English: {
         questionDescription: formData.questionDescription || '',
-        tableHeaderValue: formData.tableHeaderValue || '',
-        tableQuestionValue: formData.tableQuestionValue || '',
+        tableHeaderValue: englishTableHeaderValue,
+        tableQuestionValue: englishTableQuestionValue,
         options: englishOptions
       }
     };
 
     nonEnglishLanguages.forEach(lang => {
       const langData = langTranslations[lang] || {};
+      const langHeaderValue = formatTableHeaders(langData.tableHeaders || ['', '']) || englishTableHeaderValue;
+      const langQuestionValue = formatTableQuestions(
+        (langData.tableQuestions || []).length > 0 ? langData.tableQuestions : tableQuestions.map(() => ({ text: '' }))
+      ) || englishTableQuestionValue;
       translations[lang] = {
         questionDescription: langData.questionDescription || formData.questionDescription || '',
-        tableHeaderValue: langData.tableHeaderValue || formData.tableHeaderValue || '',
-        tableQuestionValue: langData.tableQuestionValue || formData.tableQuestionValue || '',
+        tableHeaderValue: langHeaderValue,
+        tableQuestionValue: langQuestionValue,
         options: englishOptions.map((opt, i) => ({
           text: langData.options?.[i]?.text || opt.text || '',
           textInEnglish: opt.text || opt.textInEnglish || '',
@@ -382,6 +472,8 @@ const QuestionForm = () => {
       ...formData,
       questionId: normalizedId,
       sourceQuestion: resolvedSource,
+      tableHeaderValue: englishTableHeaderValue,
+      tableQuestionValue: englishTableQuestionValue,
       options: englishOptions,
       medium: surveyLanguages[0] || 'English',
       translations
@@ -637,39 +729,83 @@ const QuestionForm = () => {
           </div>
 
           {fieldConfig.showTableFields && (
-            <div className="form-row">
+            <>
               <div className="form-group">
-                <label htmlFor="tableHeaderValue">
-                  Table Header Value {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
+                <label>
+                  Table Headers {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
                 </label>
-                <input
-                  type="text"
-                  id="tableHeaderValue"
-                  name="tableHeaderValue"
-                  value={formData.tableHeaderValue}
-                  onChange={handleChange}
-                  placeholder="e.g., Header 1, Header 2"
-                  className={errors.tableHeaderValue ? 'error' : ''}
-                />
+                <div className="form-row" style={{ gap: '0.75rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <input
+                      type="text"
+                      value={tableHeaders[0]}
+                      onChange={(e) => handleTableHeaderChange(0, e.target.value)}
+                      placeholder="Header 1 (e.g., Criteria)"
+                      className={errors.tableHeaderValue ? 'error' : ''}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <input
+                      type="text"
+                      value={tableHeaders[1]}
+                      onChange={(e) => handleTableHeaderChange(1, e.target.value)}
+                      placeholder="Header 2 (e.g., Value)"
+                      className={errors.tableHeaderValue ? 'error' : ''}
+                    />
+                  </div>
+                </div>
                 {errors.tableHeaderValue && <span className="error-text">{errors.tableHeaderValue}</span>}
               </div>
 
               <div className="form-group">
-                <label htmlFor="tableQuestionValue">
-                  Table Question Value {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
+                <label>
+                  Table Questions {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
                 </label>
-                <textarea
-                  id="tableQuestionValue"
-                  name="tableQuestionValue"
-                  value={formData.tableQuestionValue}
-                  onChange={handleChange}
-                  rows="4"
-                  placeholder={'Format:\na:Question 1\nb:Question 2'}
-                  className={errors.tableQuestionValue ? 'error' : ''}
-                />
                 {errors.tableQuestionValue && <span className="error-text">{errors.tableQuestionValue}</span>}
+                <div className="options-table" style={{ marginTop: '0.5rem' }}>
+                  <div className="options-table-row options-table-header">
+                    <div className="options-table-cell" style={{ width: '2.5rem', flexShrink: 0 }}>#</div>
+                    <div className="options-table-cell">Row Question {nonEnglishLanguages.length > 0 ? '(English)' : ''}</div>
+                    <div className="options-table-cell options-table-label">Action</div>
+                  </div>
+                  {tableQuestions.map((tq, index) => (
+                    <div className="options-table-row" key={`tq-${index}`}>
+                      <div className="options-table-cell table-row-label-col">
+                        <span className="table-row-label">{getRowLabel(index)}</span>
+                      </div>
+                      <div className="options-table-cell">
+                        <input
+                          type="text"
+                          value={tq.text}
+                          onChange={(e) => handleTableQuestionChange(index, e.target.value)}
+                          placeholder={`Row ${index + 1} question`}
+                        />
+                      </div>
+                      <div className="options-table-cell">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-danger"
+                          onClick={() => removeTableQuestion(index)}
+                          disabled={tableQuestions.length <= 1}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '0.625rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={addTableQuestion}
+                    disabled={tableQuestions.length >= TABLE_QUESTION_MAX}
+                  >
+                    Add Row ({tableQuestions.length}/{TABLE_QUESTION_MAX})
+                  </button>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
@@ -918,23 +1054,45 @@ const QuestionForm = () => {
                 {fieldConfig.showTableFields && (
                   <>
                     <div className="form-group">
-                      <label>Table Header in {lang}</label>
-                      <input
-                        type="text"
-                        value={langTranslations[lang]?.tableHeaderValue || ''}
-                        onChange={(e) => handleTranslationChange(lang, 'tableHeaderValue', e.target.value)}
-                        placeholder={`Table header in ${lang}…`}
-                      />
+                      <label>Table Headers in {lang}</label>
+                      <div className="form-row" style={{ gap: '0.75rem' }}>
+                        {[0, 1].map(idx => (
+                          <div key={idx} className="form-group" style={{ marginBottom: 0 }}>
+                            <input
+                              type="text"
+                              value={langTranslations[lang]?.tableHeaders?.[idx] || ''}
+                              onChange={(e) => handleTranslationTableHeaderChange(lang, idx, e.target.value)}
+                              placeholder={tableHeaders[idx] ? `"${tableHeaders[idx]}" in ${lang}` : `Header ${idx + 1} in ${lang}…`}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="form-group">
-                      <label>Table Questions in {lang}</label>
-                      <textarea
-                        value={langTranslations[lang]?.tableQuestionValue || ''}
-                        onChange={(e) => handleTranslationChange(lang, 'tableQuestionValue', e.target.value)}
-                        rows="4"
-                        placeholder={'Format:\na:Question 1\nb:Question 2'}
-                      />
-                    </div>
+                    {tableQuestions.length > 0 && (
+                      <div className="form-group">
+                        <label>Table Questions in {lang}</label>
+                        <div className="translation-options-grid">
+                          <div className="translation-options-header">
+                            <span>English</span>
+                            <span>{lang} ({getNativeScript(lang)})</span>
+                          </div>
+                          {tableQuestions.map((tq, i) => (
+                            <div key={i} className="translation-option-row">
+                              <span className="translation-option-source">
+                                <span className="table-row-label" style={{ marginRight: '0.375rem' }}>{getRowLabel(i)}</span>
+                                {tq.text || <em style={{ opacity: 0.5 }}>Row {i + 1}</em>}
+                              </span>
+                              <input
+                                type="text"
+                                value={langTranslations[lang]?.tableQuestions?.[i]?.text || ''}
+                                onChange={(e) => handleTranslationTableQuestionChange(lang, i, e.target.value)}
+                                placeholder={`${lang} translation`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 

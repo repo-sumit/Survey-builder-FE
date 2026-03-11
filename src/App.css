@@ -2397,6 +2397,26 @@ div[style*="60vh"] {
   align-items: center;
 }
 
+.table-row-label-col {
+  flex: 0 0 2.5rem !important;
+  max-width: 2.5rem;
+  text-align: center;
+}
+
+.table-row-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  background: var(--primary-light, #e0e7ff);
+  color: var(--primary, #4f46e5);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: monospace;
+}
+
 @media (max-width: 640px) {
   .translation-lang-header { flex-direction: column; align-items: flex-start; }
   .translation-options-header,
