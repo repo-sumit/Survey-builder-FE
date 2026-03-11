@@ -612,16 +612,13 @@ const SurveyForm = () => {
               <DatePicker
                 selected={parseDate(formData.launchDate)}
                 onChange={(date) => handleDateChange(date, 'launchDate')}
-                showTimeSelect
-                timeFormat="HH:mm:ss"
-                timeIntervals={15}
-                dateFormat="dd/MM/yyyy HH:mm:ss"
-                placeholderText="Select launch date and time"
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Select launch date"
                 className={errors.launchDate ? 'error' : ''}
                 isClearable
               />
               {errors.launchDate && <span className="error-text">{errors.launchDate}</span>}
-              <small>Format: DD/MM/YYYY HH:MM:SS (e.g., 28/01/2025 00:00:00)</small>
+              <small>Time auto-set to 00:00:00</small>
             </div>
 
             <div className="form-group">
@@ -629,17 +626,14 @@ const SurveyForm = () => {
               <DatePicker
                 selected={parseDate(formData.closeDate)}
                 onChange={(date) => handleDateChange(date, 'closeDate')}
-                showTimeSelect
-                timeFormat="HH:mm:ss"
-                timeIntervals={15}
-                dateFormat="dd/MM/yyyy HH:mm:ss"
-                placeholderText="Select close date and time"
+                dateFormat="dd/MM/yyyy"
+                placeholderText="Select close date"
                 className={errors.closeDate ? 'error' : ''}
                 minDate={parseDate(formData.launchDate)}
                 isClearable
               />
               {errors.closeDate && <span className="error-text">{errors.closeDate}</span>}
-              <small>Format: DD/MM/YYYY HH:MM:SS (must be ≥ Launch Date)</small>
+              <small>Time auto-set to 23:59:59 · must be ≥ Launch Date</small>
             </div>
           </div>
         </div>

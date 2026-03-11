@@ -809,25 +809,6 @@ const QuestionForm = () => {
           )}
         </div>
 
-        {/* ── QUESTION RELATIONSHIP ── */}
-        <div className="form-section">
-          <h3>Question Relationship</h3>
-          <div className="form-group">
-            <label htmlFor="sourceQuestion">Source Question (Parent)</label>
-            <input
-              type="text"
-              id="sourceQuestion"
-              name="sourceQuestion"
-              value={formData.sourceQuestion}
-              onChange={handleChange}
-              placeholder="e.g., 1 (for child questions)"
-              className={errors.sourceQuestion ? 'error' : ''}
-            />
-            {errors.sourceQuestion && <span className="error-text">{errors.sourceQuestion}</span>}
-            <small>Only required for child questions (e.g., 1.1, 1.2)</small>
-          </div>
-        </div>
-
         {/* ── OPTIONS (English) ── */}
         {fieldConfig.showOptions && (
           <div className="form-section">
