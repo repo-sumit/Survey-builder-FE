@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { surveyAPI, questionAPI, exportAPI, publishAPI, lockAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -10,23 +11,30 @@ const QuestionList = () => {
   const { surveyId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [survey, setSurvey] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
   const [exporting, setExporting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [lockInfo, setLockInfo] = useState(null);
   const questionListRef = useRef(null);
 
+  const { data: survey, isLoading: surveyLoading, error: surveyError } = useQuery({
+    queryKey: ['survey', surveyId],
+    queryFn: () => surveyAPI.getById(surveyId),
+  });
+
+  const { data: questions = [], isLoading: questionsLoading, error: questionsError } = useQuery({
+    queryKey: ['questions', surveyId],
+    queryFn: () => questionAPI.getAll(surveyId),
+  });
+
+  const loading = surveyLoading || questionsLoading;
+  const error = (surveyError || questionsError) ? 'Failed to load data' : null;
+
   const isReadOnly = user?.role !== 'admin' && !user?.isActive;
   const isPublished = survey?.publish?.status === 'PUBLISHED';
 
   useEffect(() => {
-    loadData();
     acquireLock();
-
-    // Release lock when leaving the page
     return () => {
       lockAPI.release(surveyId).catch(() => {});
     };
@@ -38,7 +46,6 @@ const QuestionList = () => {
     const lastEditedId = sessionStorage.getItem('lastEditedQuestionId');
     if (lastEditedId && questions.length > 0) {
       sessionStorage.removeItem('lastEditedQuestionId');
-      // Small delay to allow DOM rendering
       setTimeout(() => {
         const el = document.getElementById(`question-${lastEditedId}`);
         if (el) {
@@ -55,41 +62,24 @@ const QuestionList = () => {
       const result = await lockAPI.acquire(surveyId);
       setLockInfo(result.lock || null);
     } catch (err) {
-      // Lock couldn't be acquired — someone else has it
       if (err.response?.status === 409) {
         setLockInfo(err.response.data.lock || { locked: true });
       }
     }
   };
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [surveyData, questionsData] = await Promise.all([
-        surveyAPI.getById(surveyId),
-        questionAPI.getAll(surveyId)
-      ]);
-      setSurvey(surveyData);
-      setQuestions(questionsData);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load data');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const deleteMutation = useMutation({
+    mutationFn: (questionId) => questionAPI.delete(surveyId, questionId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['questions', surveyId] }),
+    onError: (err) => {
+      const msg = err.response?.data?.error || 'Failed to delete question';
+      alert(msg);
+    },
+  });
 
-  const handleDelete = async (questionId) => {
+  const handleDelete = (questionId) => {
     if (window.confirm('Are you sure you want to delete this question?')) {
-      try {
-        await questionAPI.delete(surveyId, questionId);
-        loadData();
-      } catch (err) {
-        const msg = err.response?.data?.error || 'Failed to delete question';
-        alert(msg);
-        console.error(err);
-      }
+      deleteMutation.mutate(questionId);
     }
   };
 
@@ -108,24 +98,21 @@ const QuestionList = () => {
   };
 
   const handleDuplicate = async (questionId) => {
+    const newQuestionId = window.prompt('Enter the new Question ID (example: 4 or Q4):');
+    if (!newQuestionId) return;
+    const normalizedQuestionId = normalizeQuestionId(newQuestionId);
+    if (!normalizedQuestionId) {
+      alert('Question ID is required.');
+      return;
+    }
     try {
-      const newQuestionId = window.prompt('Enter the new Question ID (example: 4 or Q4):');
-      if (!newQuestionId) {
-        return;
-      }
-      const normalizedQuestionId = normalizeQuestionId(newQuestionId);
-      if (!normalizedQuestionId) {
-        alert('Question ID is required.');
-        return;
-      }
       const duplicatedQuestion = await questionAPI.duplicate(surveyId, questionId, normalizedQuestionId);
-      loadData();
+      queryClient.invalidateQueries({ queryKey: ['questions', surveyId] });
       alert(`Question duplicated successfully as ${duplicatedQuestion.questionId}`);
       navigate(`/surveys/${surveyId}/questions/${duplicatedQuestion.questionId}/edit`);
     } catch (err) {
       const errorMessage = err.response?.data?.error || 'Failed to duplicate question';
       alert(errorMessage);
-      console.error(err);
     }
   };
 
@@ -147,7 +134,7 @@ const QuestionList = () => {
     try {
       setPublishing(true);
       await publishAPI.publish(surveyId);
-      await loadData();
+      queryClient.invalidateQueries({ queryKey: ['survey', surveyId] });
       alert('Survey published successfully');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to publish survey';
@@ -162,7 +149,7 @@ const QuestionList = () => {
     try {
       setPublishing(true);
       await publishAPI.unpublish(surveyId);
-      await loadData();
+      queryClient.invalidateQueries({ queryKey: ['survey', surveyId] });
       alert('Survey unpublished successfully');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to unpublish survey';

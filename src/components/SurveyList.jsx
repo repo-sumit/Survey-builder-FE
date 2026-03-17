@@ -1,47 +1,50 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { surveyAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import DuplicateSurveyModal from './DuplicateSurveyModal';
 
 const SurveyList = () => {
-  const [surveys, setSurveys] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [duplicatingModal, setDuplicatingModal] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const isReadOnly = user?.role !== 'admin' && !user?.isActive;
 
-  useEffect(() => {
-    loadSurveys();
-  }, []);
+  const { data: surveys = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['surveys'],
+    queryFn: surveyAPI.getAll,
+  });
 
-  const loadSurveys = async () => {
-    try {
-      setLoading(true);
-      const data = await surveyAPI.getAll();
-      setSurveys(data);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load surveys');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const error = queryError ? 'Failed to load surveys' : null;
 
-  const handleDelete = async (surveyId) => {
+  const deleteMutation = useMutation({
+    mutationFn: (surveyId) => surveyAPI.delete(surveyId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['surveys'] }),
+    onError: (err) => {
+      const msg = err.response?.data?.error || 'Failed to delete survey';
+      alert(msg);
+    },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: ({ surveyId, newSurveyId }) => surveyAPI.duplicate(surveyId, newSurveyId),
+    onSuccess: (_, { newSurveyId }) => {
+      setDuplicatingModal(null);
+      queryClient.invalidateQueries({ queryKey: ['surveys'] });
+      alert(`Survey duplicated successfully as ${newSurveyId}`);
+    },
+    onError: (err) => {
+      const errorMessage = err.response?.data?.error || 'Failed to duplicate survey';
+      alert(errorMessage);
+    },
+  });
+
+  const handleDelete = (surveyId) => {
     if (window.confirm('Are you sure you want to delete this survey? All associated questions will also be deleted.')) {
-      try {
-        await surveyAPI.delete(surveyId);
-        loadSurveys();
-      } catch (err) {
-        const msg = err.response?.data?.error || 'Failed to delete survey';
-        alert(msg);
-        console.error(err);
-      }
+      deleteMutation.mutate(surveyId);
     }
   };
 
@@ -49,17 +52,8 @@ const SurveyList = () => {
     setDuplicatingModal(survey);
   };
 
-  const handleDuplicateConfirm = async (newSurveyId) => {
-    try {
-      await surveyAPI.duplicate(duplicatingModal.surveyId, newSurveyId);
-      setDuplicatingModal(null);
-      loadSurveys();
-      alert(`Survey duplicated successfully as ${newSurveyId}`);
-    } catch (err) {
-      const errorMessage = err.response?.data?.error || 'Failed to duplicate survey';
-      alert(errorMessage);
-      console.error(err);
-    }
+  const handleDuplicateConfirm = (newSurveyId) => {
+    duplicateMutation.mutate({ surveyId: duplicatingModal.surveyId, newSurveyId });
   };
 
   const isPublished = (survey) => survey.publish?.status === 'PUBLISHED';

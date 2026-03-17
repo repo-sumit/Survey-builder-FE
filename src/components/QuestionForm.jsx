@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { questionAPI, surveyAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
 import { questionTypes, textInputTypes, questionMediaTypes, yesNoOptions, getFieldsForQuestionType } from '../schemas/questionTypeSchema';
@@ -33,6 +34,8 @@ const QuestionForm = () => {
   const { surveyId, questionId } = useParams();
   const isEdit = Boolean(questionId);
   const { errors, validateQuestion, setErrors } = useValidation();
+  const queryClient = useQueryClient();
+  const initKey = useRef(null);  // tracks which (surveyId+questionId) we've initialized for
 
   const [survey, setSurvey] = useState(null);
   const [surveyLanguages, setSurveyLanguages] = useState([]);
@@ -74,12 +77,26 @@ const QuestionForm = () => {
   const [submitError, setSubmitError] = useState(null);
   const [fieldConfig, setFieldConfig] = useState({});
 
-  // ─── Load data ────────────────────────────────────────────────────────────
+  // ─── Load data (React Query) ───────────────────────────────────────────────
+
+  const { data: _surveyData } = useQuery({
+    queryKey: ['survey', surveyId],
+    queryFn: () => surveyAPI.getById(surveyId),
+  });
+
+  const { data: _allQuestions } = useQuery({
+    queryKey: ['questions', surveyId],
+    queryFn: () => questionAPI.getAll(surveyId),
+  });
 
   useEffect(() => {
-    loadAll();
+    if (!_surveyData || !_allQuestions) return;
+    const currentKey = `${surveyId}::${questionId ?? ''}`;
+    if (initKey.current === currentKey) return;  // already initialized for this route
+    initKey.current = currentKey;
+    initializeForm(_surveyData, _allQuestions);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyId, questionId]);
+  }, [_surveyData, _allQuestions, surveyId, questionId]);
 
   useEffect(() => {
     if (!formData.questionType) return;
@@ -131,63 +148,56 @@ const QuestionForm = () => {
     return result;
   };
 
-  const loadAll = async () => {
+  const initializeForm = (surveyData, questions) => {
     setLoadError(null);
-    try {
-      const surveyData = await surveyAPI.getById(surveyId);
-      setSurvey(surveyData);
+    setSurvey(surveyData);
 
-      const langs = parseAvailableMediums(surveyData);
-      const effectiveLangs = langs.length > 0 ? langs : ['English'];
-      setSurveyLanguages(effectiveLangs);
+    const langs = parseAvailableMediums(surveyData);
+    const effectiveLangs = langs.length > 0 ? langs : ['English'];
+    setSurveyLanguages(effectiveLangs);
+    setExistingQuestions(questions);
 
-      const questions = await questionAPI.getAll(surveyId);
-      setExistingQuestions(questions);
-
-      if (!isEdit) {
-        setFormData(prev => ({ ...prev, medium: effectiveLangs[0] || 'English' }));
-        setTableHeaders(['', '']);
-        setTableQuestions([{ text: '' }]);
-        setLangTranslations(buildEmptyLangSlots(effectiveLangs, 0, {}, 1));
-        return;
-      }
-
-      const question = questions.find(q => q.questionId === questionId);
-      if (!question) {
-        setLoadError('Question not found. It may have been deleted.');
-        return;
-      }
-
-      // Resolve English source — prefer translations.English, fall back to top-level fields
-      const storedTranslations = question.translations || {};
-      const englishSrc = storedTranslations.English || {
-        questionDescription: question.questionDescription || '',
-        options: question.options || [],
-        tableHeaderValue: question.tableHeaderValue || '',
-        tableQuestionValue: question.tableQuestionValue || ''
-      };
-      const englishOptions = Array.isArray(englishSrc.options) && englishSrc.options.length > 0
-        ? englishSrc.options
-        : (question.options || []);
-
-      const parsedHeaders = parseTableHeaders(englishSrc.tableHeaderValue || question.tableHeaderValue || '');
-      const parsedQuestions = parseTableQuestions(englishSrc.tableQuestionValue || question.tableQuestionValue || '');
-
-      setTableHeaders(parsedHeaders);
-      setTableQuestions(parsedQuestions);
-
-      setFormData(prev => ({
-        ...prev,
-        ...question,
-        questionDescription: englishSrc.questionDescription || question.questionDescription || '',
-        options: englishOptions,
-        medium: question.medium || effectiveLangs[0] || 'English'
-      }));
-
-      setLangTranslations(buildEmptyLangSlots(effectiveLangs, englishOptions.length, storedTranslations, parsedQuestions.length));
-    } catch (err) {
-      setLoadError('Failed to load data. Please go back and try again.');
+    if (!isEdit) {
+      setFormData(prev => ({ ...prev, medium: effectiveLangs[0] || 'English' }));
+      setTableHeaders(['', '']);
+      setTableQuestions([{ text: '' }]);
+      setLangTranslations(buildEmptyLangSlots(effectiveLangs, 0, {}, 1));
+      return;
     }
+
+    const question = questions.find(q => q.questionId === questionId);
+    if (!question) {
+      setLoadError('Question not found. It may have been deleted.');
+      return;
+    }
+
+    // Resolve English source — prefer translations.English, fall back to top-level fields
+    const storedTranslations = question.translations || {};
+    const englishSrc = storedTranslations.English || {
+      questionDescription: question.questionDescription || '',
+      options: question.options || [],
+      tableHeaderValue: question.tableHeaderValue || '',
+      tableQuestionValue: question.tableQuestionValue || ''
+    };
+    const englishOptions = Array.isArray(englishSrc.options) && englishSrc.options.length > 0
+      ? englishSrc.options
+      : (question.options || []);
+
+    const parsedHeaders = parseTableHeaders(englishSrc.tableHeaderValue || question.tableHeaderValue || '');
+    const parsedQuestions = parseTableQuestions(englishSrc.tableQuestionValue || question.tableQuestionValue || '');
+
+    setTableHeaders(parsedHeaders);
+    setTableQuestions(parsedQuestions);
+
+    setFormData(prev => ({
+      ...prev,
+      ...question,
+      questionDescription: englishSrc.questionDescription || question.questionDescription || '',
+      options: englishOptions,
+      medium: question.medium || effectiveLangs[0] || 'English'
+    }));
+
+    setLangTranslations(buildEmptyLangSlots(effectiveLangs, englishOptions.length, storedTranslations, parsedQuestions.length));
   };
 
   const nonEnglishLanguages = surveyLanguages.filter(l => l !== 'English');
@@ -512,6 +522,7 @@ const QuestionForm = () => {
         await questionAPI.create(surveyId, payload);
         sessionStorage.setItem('lastEditedQuestionId', payload.questionId);
       }
+      queryClient.invalidateQueries({ queryKey: ['questions', surveyId] });
       navigate(`/surveys/${surveyId}/questions`);
     } catch (err) {
       if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {

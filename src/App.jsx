@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
@@ -8,6 +9,16 @@ import Login from './components/Login';
 import Navigation from './components/Navigation';
 import './App.css';
 import './swiftchatRedesign.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 2,   // 2 minutes — data is fresh, no refetch on revisit
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 /* Lazy-loaded route components — each gets its own chunk */
 const SurveyList = lazy(() => import('./components/SurveyList'));
@@ -120,6 +131,7 @@ function App() {
   }, []);
 
   return (
+    <QueryClientProvider client={queryClient}>
     <Router>
       <AuthProvider>
         <ToastProvider>
@@ -170,6 +182,7 @@ function App() {
         </ToastProvider>
       </AuthProvider>
     </Router>
+    </QueryClientProvider>
   );
 }
 
