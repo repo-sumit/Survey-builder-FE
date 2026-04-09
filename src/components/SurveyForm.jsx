@@ -4,6 +4,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { surveyAPI, designationAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
+import { useToast } from './Toast';
 import { AVAILABLE_MEDIUMS } from '../schemas/validationConstants';
 
 const SurveyForm = () => {
@@ -11,6 +12,7 @@ const SurveyForm = () => {
   const { surveyId } = useParams();
   const isEdit = Boolean(surveyId);
   const { errors, validateSurvey, setErrors } = useValidation();
+  const toast = useToast();
 
   const [formData, setFormData] = useState({
     surveyId: '',
@@ -89,7 +91,7 @@ const SurveyForm = () => {
         setSelectedLevels(data.hierarchicalAccessLevel.split(',').map(l => l.trim()).filter(Boolean));
       }
     } catch (err) {
-      alert('Failed to load survey');
+      toast.error('Failed to load survey');
       navigate('/');
     }
   };
@@ -236,6 +238,7 @@ const SurveyForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return; // guard against double-submit
     setSubmitError(null);
     setErrors({});
 
@@ -282,11 +285,11 @@ const SurveyForm = () => {
       
       if (isEdit) {
         await surveyAPI.update(surveyId, dataToSend);
-        alert('✓ Survey updated successfully');
+        toast.success('Survey updated successfully');
         navigate('/');
       } else {
         const response = await surveyAPI.create(dataToSend);
-        alert('✓ Survey created successfully! You can now add questions.');
+        toast.success('Survey created successfully! You can now add questions.');
         // Redirect to Question Master after creating survey
         navigate(`/surveys/${response.surveyId}/questions`);
       }

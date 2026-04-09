@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useToast } from './Toast';
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
@@ -44,6 +45,7 @@ function normalizeApiErrorPayload(payload, fallback = 'Import failed') {
 
 const ImportSurvey = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [file, setFile]           = useState(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult]       = useState(null);
@@ -70,7 +72,7 @@ const ImportSurvey = () => {
         setErrors(null);
         setResult(null);
       } else {
-        alert('Please select a valid XLSX or CSV file');
+        toast.error('Please select a valid XLSX or CSV file');
         e.target.value = '';
       }
     }
@@ -78,7 +80,7 @@ const ImportSurvey = () => {
 
   const handleImport = async () => {
     if (!file) {
-      alert('Please select a file to import');
+      toast.error('Please select a file to import');
       return;
     }
 

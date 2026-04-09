@@ -4,12 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { surveyAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import DuplicateSurveyModal from './DuplicateSurveyModal';
+import { useToast } from './Toast';
 
 const SurveyList = () => {
   const [duplicatingModal, setDuplicatingModal] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const isReadOnly = user?.role !== 'admin' && !user?.isActive;
 
@@ -25,7 +27,7 @@ const SurveyList = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['surveys'] }),
     onError: (err) => {
       const msg = err.response?.data?.error || 'Failed to delete survey';
-      alert(msg);
+      toast.error(msg);
     },
   });
 
@@ -34,11 +36,11 @@ const SurveyList = () => {
     onSuccess: (_, { newSurveyId }) => {
       setDuplicatingModal(null);
       queryClient.invalidateQueries({ queryKey: ['surveys'] });
-      alert(`Survey duplicated successfully as ${newSurveyId}`);
+      toast.success(`Survey duplicated successfully as ${newSurveyId}`);
     },
     onError: (err) => {
       const errorMessage = err.response?.data?.error || 'Failed to duplicate survey';
-      alert(errorMessage);
+      toast.error(errorMessage);
     },
   });
 

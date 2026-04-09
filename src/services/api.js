@@ -4,6 +4,9 @@ const API_BASE_URL = '/api';
 const AUTH_LOGIN_TIMEOUT_MS = 45000;
 const AUTH_WARMUP_TIMEOUT_MS = 15000;
 
+// Default timeout for all requests (30s)
+axios.defaults.timeout = 30000;
+
 // --- Axios interceptors ---
 
 axios.interceptors.request.use((config) => {

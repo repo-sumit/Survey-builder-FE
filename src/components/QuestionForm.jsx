@@ -461,6 +461,7 @@ const QuestionForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return; // guard against double-submit
     setSubmitError(null);
     setErrors({});
 

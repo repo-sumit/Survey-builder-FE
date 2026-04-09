@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { designationAPI, stateConfigAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from './Toast';
 
 const EMPTY_FORM = {
   hierarchy_level:   '',
@@ -12,6 +13,7 @@ const EMPTY_FORM = {
 
 const DesignationMapping = () => {
   const { user } = useAuth();
+  const toast = useToast();
   const isAdmin  = user?.role === 'admin';
 
   const [rows, setRows]                 = useState([]);
@@ -100,14 +102,14 @@ const DesignationMapping = () => {
   const handleDelete = async (row) => {
     if (!window.confirm(`Delete "${row.designation_name}" (Level ${row.hierarchy_level})?`)) return;
     try { await designationAPI.delete(row.id, row.state_code); load(); }
-    catch (err) { alert(err.response?.data?.error || 'Failed to delete'); }
+    catch (err) { toast.error(err.response?.data?.error || 'Failed to delete'); }
   };
 
   const handleExport = async () => {
     try {
       setExporting(true);
       await designationAPI.exportXlsx(isAdmin ? filterState || undefined : user?.stateCode);
-    } catch { alert('Failed to export'); }
+    } catch { toast.error('Failed to export'); }
     finally { setExporting(false); }
   };
 

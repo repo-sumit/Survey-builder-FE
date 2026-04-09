@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { surveyAPI, questionAPI, exportAPI, publishAPI, lockAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from './Toast';
 
 const FEATURE_PUBLISH = (typeof process !== 'undefined' && process.env?.REACT_APP_FEATURE_PUBLISH === 'true') ||
   (typeof window !== 'undefined' && window.__ENV__?.FEATURE_PUBLISH === 'true');
@@ -12,6 +13,7 @@ const QuestionList = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [exporting, setExporting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [lockInfo, setLockInfo] = useState(null);
@@ -73,7 +75,7 @@ const QuestionList = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['questions', surveyId] }),
     onError: (err) => {
       const msg = err.response?.data?.error || 'Failed to delete question';
-      alert(msg);
+      toast.error(msg);
     },
   });
 
@@ -102,17 +104,17 @@ const QuestionList = () => {
     if (!newQuestionId) return;
     const normalizedQuestionId = normalizeQuestionId(newQuestionId);
     if (!normalizedQuestionId) {
-      alert('Question ID is required.');
+      toast.error('Question ID is required.');
       return;
     }
     try {
       const duplicatedQuestion = await questionAPI.duplicate(surveyId, questionId, normalizedQuestionId);
       queryClient.invalidateQueries({ queryKey: ['questions', surveyId] });
-      alert(`Question duplicated successfully as ${duplicatedQuestion.questionId}`);
+      toast.success(`Question duplicated successfully as ${duplicatedQuestion.questionId}`);
       navigate(`/surveys/${surveyId}/questions/${duplicatedQuestion.questionId}/edit`);
     } catch (err) {
       const errorMessage = err.response?.data?.error || 'Failed to duplicate question';
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -120,9 +122,9 @@ const QuestionList = () => {
     try {
       setExporting(true);
       await exportAPI.download(surveyId);
-      alert('Excel file downloaded successfully');
+      toast.success('Excel file downloaded successfully');
     } catch (err) {
-      alert('Failed to export survey');
+      toast.error('Failed to export survey');
       console.error(err);
     } finally {
       setExporting(false);
@@ -135,10 +137,10 @@ const QuestionList = () => {
       setPublishing(true);
       await publishAPI.publish(surveyId);
       queryClient.invalidateQueries({ queryKey: ['survey', surveyId] });
-      alert('Survey published successfully');
+      toast.success('Survey published successfully');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to publish survey';
-      alert(msg);
+      toast.error(msg);
     } finally {
       setPublishing(false);
     }
@@ -150,10 +152,10 @@ const QuestionList = () => {
       setPublishing(true);
       await publishAPI.unpublish(surveyId);
       queryClient.invalidateQueries({ queryKey: ['survey', surveyId] });
-      alert('Survey unpublished successfully');
+      toast.success('Survey unpublished successfully');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to unpublish survey';
-      alert(msg);
+      toast.error(msg);
     } finally {
       setPublishing(false);
     }

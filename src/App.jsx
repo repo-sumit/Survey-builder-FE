@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
 import Navigation from './components/Navigation';
 import './App.css';
@@ -14,8 +15,14 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 2,   // 2 minutes — data is fresh, no refetch on revisit
-      retry: 1,
-      refetchOnWindowFocus: false,
+      retry: (failureCount, error) => {
+        // Don't retry client errors (4xx) except 408 (timeout) and 429 (rate limit)
+        const status = error?.response?.status;
+        if (status && status < 500 && status !== 408 && status !== 429) return false;
+        return failureCount < 3;
+      },
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15000),
+      refetchOnWindowFocus: true,
     },
   },
 });
@@ -148,6 +155,7 @@ function App() {
                   <div className="app">
                     <Navigation />
                     <main className="main-content">
+                      <ErrorBoundary>
                       <Suspense fallback={<PageLoader />}>
                       <Routes>
                         {/* State-user-only routes — admin is redirected to /admin */}
@@ -173,6 +181,7 @@ function App() {
                         />
                       </Routes>
                       </Suspense>
+                      </ErrorBoundary>
                     </main>
                   </div>
                 </ProtectedRoute>

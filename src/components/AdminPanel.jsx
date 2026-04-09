@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminAPI, stateConfigAPI } from '../services/api';
+import { useToast } from './Toast';
 
 /* ── helpers ──────────────────────────────────────────────────── */
 const LANG_OPTIONS = [
@@ -11,6 +12,7 @@ const parseLangs = (str) =>
 const joinLangs  = (arr) => arr.join(',');
 
 const AdminPanel = () => {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('states');
 
   /* ── State Config ─────────────────────────────────────────────── */
@@ -88,7 +90,7 @@ const AdminPanel = () => {
   const handleDeleteState = async (sc) => {
     if (!window.confirm(`Delete state "${sc}"?`)) return;
     try { await stateConfigAPI.delete(sc); loadStates(); }
-    catch (err) { alert(err.response?.data?.error || 'Failed to delete'); }
+    catch (err) { toast.error(err.response?.data?.error || 'Failed to delete'); }
   };
 
   /* ── User handlers ────────────────────────────────────────────── */
