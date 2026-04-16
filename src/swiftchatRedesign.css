@@ -756,6 +756,9 @@ h6 {
   background: var(--surface);
   padding: 1.18rem 1.2rem;
   box-shadow: var(--shadow-xs);
+  position: relative;
+  overflow: visible;
+  z-index: 1;
 }
 
 .form-section h3 {
@@ -846,6 +849,10 @@ select.error,
 .react-datepicker-ignore-onclickoutside.error {
   border-color: #f3a5a0;
   background: #fff8f8;
+}
+
+.react-datepicker-popper {
+  z-index: 10 !important;
 }
 
 .error-text {
