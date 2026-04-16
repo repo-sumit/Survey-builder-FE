@@ -386,8 +386,10 @@ const QuestionForm = () => {
 
     const englishOptions = normalizeOptions(formData.options || []);
 
-    const englishTableHeaderValue = formatTableHeaders(tableHeaders);
-    const englishTableQuestionValue = formatTableQuestions(tableQuestions);
+    // Only include table fields for tabular question types
+    const isTableType = fieldConfig.showTableFields === true;
+    const englishTableHeaderValue = isTableType ? formatTableHeaders(tableHeaders) : '';
+    const englishTableQuestionValue = isTableType ? formatTableQuestions(tableQuestions) : '';
 
     // Build translations for all survey languages
     const translations = {
@@ -401,10 +403,14 @@ const QuestionForm = () => {
 
     nonEnglishLanguages.forEach(lang => {
       const langData = langTranslations[lang] || {};
-      const langHeaderValue = formatTableHeaders(langData.tableHeaders || ['', '']) || englishTableHeaderValue;
-      const langQuestionValue = formatTableQuestions(
-        (langData.tableQuestions || []).length > 0 ? langData.tableQuestions : tableQuestions.map(() => ({ text: '' }))
-      ) || englishTableQuestionValue;
+      let langHeaderValue = '';
+      let langQuestionValue = '';
+      if (isTableType) {
+        langHeaderValue = formatTableHeaders(langData.tableHeaders || ['', '']) || englishTableHeaderValue;
+        langQuestionValue = formatTableQuestions(
+          (langData.tableQuestions || []).length > 0 ? langData.tableQuestions : tableQuestions.map(() => ({ text: '' }))
+        ) || englishTableQuestionValue;
+      }
       translations[lang] = {
         questionDescription: langData.questionDescription || formData.questionDescription || '',
         tableHeaderValue: langHeaderValue,

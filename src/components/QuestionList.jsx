@@ -349,7 +349,7 @@ const QuestionList = () => {
                     </ul>
                   </div>
                 )}
-                {question.tableQuestionValue && (
+                {question.tableQuestionValue && ['Tabular Text Input', 'Tabular Drop Down', 'Tabular Check Box'].includes(question.questionType) && (
                   <div className="table-info">
                     <strong>Table Questions:</strong>
                     <pre>{question.tableQuestionValue}</pre>
