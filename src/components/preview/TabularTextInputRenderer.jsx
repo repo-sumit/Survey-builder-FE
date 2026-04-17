@@ -7,14 +7,23 @@ const INPUT_PATTERNS = {
   None: { pattern: null, inputMode: 'text', placeholder: 'Enter text' }
 };
 
+// Return number only if value is explicitly set (not null, undefined, or empty string)
+const parseOptionalNumber = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const num = Number(v);
+  return Number.isFinite(num) ? num : null;
+};
+
 const TabularTextInputRenderer = ({ question, language, onAnswer }) => {
   const translations = question.translations?.[language] || {};
   const tableHeaderValue = translations.tableHeaderValue || question.tableHeaderValue || '';
   const tableQuestionValue = translations.tableQuestionValue || question.tableQuestionValue || '';
   const inputType = question.textInputType || 'None';
-  const minValue = question.minValue != null ? Number(question.minValue) : null;
-  const maxValue = question.maxValue != null ? Number(question.maxValue) : null;
-  const maxLength = question.textLimitCharacters || 1024;
+  const minValue = parseOptionalNumber(question.minValue);
+  const maxValue = parseOptionalNumber(question.maxValue);
+  const textLimitRaw = parseOptionalNumber(question.textLimitCharacters);
+  const hasTextLimit = textLimitRaw !== null && textLimitRaw > 0;
+  const maxLength = hasTextLimit ? textLimitRaw : undefined;
   const config = INPUT_PATTERNS[inputType] || INPUT_PATTERNS.None;
 
   const parseHeaders = (value) => {
@@ -49,19 +58,19 @@ const TabularTextInputRenderer = ({ question, language, onAnswer }) => {
       filtered = raw.replace(config.pattern, '');
     }
 
-    // Enforce max length
-    if (filtered.length > maxLength) {
+    // Enforce max length only when set
+    if (hasTextLimit && filtered.length > maxLength) {
       filtered = filtered.slice(0, maxLength);
     }
 
-    // Validate min/max for numeric input
+    // Validate min/max for numeric input only when provided
     const newErrors = [...errors];
     if (inputType === 'Numeric' && filtered !== '' && filtered !== '-') {
       const num = parseFloat(filtered);
       if (!isNaN(num)) {
-        if (minValue != null && num < minValue) {
+        if (minValue !== null && num < minValue) {
           newErrors[index] = `Min: ${minValue}`;
-        } else if (maxValue != null && num > maxValue) {
+        } else if (maxValue !== null && num > maxValue) {
           newErrors[index] = `Max: ${maxValue}`;
         } else {
           newErrors[index] = '';
@@ -86,8 +95,8 @@ const TabularTextInputRenderer = ({ question, language, onAnswer }) => {
       {inputType !== 'None' && (
         <div style={{ fontSize: '0.8rem', color: 'var(--text-3, #888)', marginBottom: '0.5rem' }}>
           Input: {inputType}
-          {inputType === 'Numeric' && minValue != null && ` | Min: ${minValue}`}
-          {inputType === 'Numeric' && maxValue != null && ` | Max: ${maxValue}`}
+          {inputType === 'Numeric' && minValue !== null && ` | Min: ${minValue}`}
+          {inputType === 'Numeric' && maxValue !== null && ` | Max: ${maxValue}`}
         </div>
       )}
       <table className="preview-table">

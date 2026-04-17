@@ -193,6 +193,15 @@ const SurveyPreview = () => {
   if (phase === 'language-select') {
     return (
       <div className="preview-lang-select-page">
+        <div className="preview-exit-bar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+          <button
+            className="btn btn-secondary preview-exit-btn"
+            onClick={() => navigate(`/surveys/${surveyId}/questions`)}
+            title="Exit preview and return to Question Master"
+          >
+            ← Exit Preview
+          </button>
+        </div>
         <div className="preview-lang-card">
           <h2 className="preview-lang-survey-name">{survey?.surveyName}</h2>
           {survey?.surveyDescription && (
@@ -257,8 +266,23 @@ const SurveyPreview = () => {
   // ── Main survey screen ─────────────────────────────────────────────────────
   const currentQuestion = visibleQuestions[currentQuestionIndex];
 
+  const handleExitPreview = () => {
+    navigate(`/surveys/${surveyId}/questions`);
+  };
+
   return (
     <div className="survey-preview-container">
+      {/* Exit bar */}
+      <div className="preview-exit-bar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+        <button
+          className="btn btn-secondary preview-exit-btn"
+          onClick={handleExitPreview}
+          title="Exit preview and return to Question Master"
+        >
+          ← Exit Preview
+        </button>
+      </div>
+
       {/* Survey Info Header */}
       <div className="preview-info-header">
         <div className="preview-info-cell">
