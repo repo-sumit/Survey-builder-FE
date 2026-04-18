@@ -113,7 +113,15 @@ const QuestionList = () => {
       toast.success(`Question duplicated successfully as ${duplicatedQuestion.questionId}`);
       navigate(`/surveys/${surveyId}/questions/${duplicatedQuestion.questionId}/edit`);
     } catch (err) {
-      const errorMessage = err.response?.data?.error || 'Failed to duplicate question';
+      const data = err.response?.data;
+      let errorMessage = 'Failed to duplicate question';
+      if (data?.message) {
+        errorMessage = data.message;
+      } else if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        errorMessage = data.errors.map(e => typeof e === 'string' ? e : e.message).filter(Boolean).join(' | ');
+      } else if (data?.error) {
+        errorMessage = data.error;
+      }
       toast.error(errorMessage);
     }
   };
