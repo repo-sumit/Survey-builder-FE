@@ -202,6 +202,35 @@ const QuestionForm = () => {
 
   const nonEnglishLanguages = surveyLanguages.filter(l => l !== 'English');
 
+  // ─── Parent-mandatory rule ────────────────────────────────────────────────
+  // A child question cannot be mandatory unless its parent is mandatory.
+
+  const resolveParentQuestion = () => {
+    const id = String(formData.questionId || '').trim();
+    if (!id.includes('.')) return null;
+    const explicit = String(formData.sourceQuestion || '').trim();
+    const parentId = (/^q/i.test(explicit) ? `Q${explicit.slice(1)}` : (/^\d+(\.\d+)*$/.test(explicit) ? `Q${explicit}` : explicit))
+      || (() => {
+        const norm = /^q/i.test(id) ? `Q${id.slice(1)}` : (/^\d+(\.\d+)*$/.test(id) ? `Q${id}` : id);
+        return norm.includes('.') ? norm.split('.').slice(0, -1).join('.') : '';
+      })();
+    if (!parentId) return null;
+    return existingQuestions.find(q => q.surveyId === surveyId && q.questionId === parentId) || null;
+  };
+
+  const parentQuestion = resolveParentQuestion();
+  const isChildQuestion = String(formData.questionId || '').includes('.');
+  const parentIsMandatory = parentQuestion?.isMandatory === 'Yes';
+  const mandatoryLockedByParent = isChildQuestion && parentQuestion != null && !parentIsMandatory;
+
+  useEffect(() => {
+    if (mandatoryLockedByParent && formData.isMandatory === 'Yes') {
+      setFormData(prev => ({ ...prev, isMandatory: 'No' }));
+      setErrors(prev => { const e = { ...prev }; delete e.isMandatory; return e; });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mandatoryLockedByParent]);
+
   // ─── ID helpers ───────────────────────────────────────────────────────────
 
   const normalizeQuestionId = (value) => {
@@ -487,6 +516,26 @@ const QuestionForm = () => {
       return;
     }
 
+    // Min/Max value sanity check
+    const minRaw = formData.minValue;
+    const maxRaw = formData.maxValue;
+    const hasMin = minRaw !== null && minRaw !== undefined && String(minRaw).trim() !== '';
+    const hasMax = maxRaw !== null && maxRaw !== undefined && String(maxRaw).trim() !== '';
+    if (hasMin && hasMax) {
+      const minNum = Number(minRaw);
+      const maxNum = Number(maxRaw);
+      if (!Number.isFinite(minNum) || !Number.isFinite(maxNum)) {
+        setErrors({ maxValue: 'Min and Max Value must be numbers' });
+        setSubmitError('Min and Max Value must be numbers');
+        return;
+      }
+      if (maxNum <= minNum) {
+        setErrors({ maxValue: `Max Value (${maxNum}) must be greater than Min Value (${minNum})` });
+        setSubmitError(`Max Value (${maxNum}) must be greater than Min Value (${minNum})`);
+        return;
+      }
+    }
+
     const payload = buildQuestionPayload();
 
     if (payload.questionId.includes('.')) {
@@ -500,6 +549,11 @@ const QuestionForm = () => {
       if (parentQ && parentQ.questionType !== 'Multiple Choice Single Select') {
         setErrors({ questionId: 'Child questions can only belong to Multiple Choice Single Select questions.' });
         setSubmitError('Only Multiple Choice Single Select questions can have child questions. Change the Question ID or parent.');
+        return;
+      }
+      if (parentQ && parentQ.isMandatory !== 'Yes' && payload.isMandatory === 'Yes') {
+        setErrors({ isMandatory: `Child question cannot be mandatory because parent ${parentQ.questionId} is not mandatory.` });
+        setSubmitError(`Child question cannot be marked mandatory: parent question ${parentQ.questionId} is not mandatory. Set the parent to mandatory first, or set this child to "No".`);
         return;
       }
     }
@@ -938,9 +992,20 @@ const QuestionForm = () => {
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="isMandatory">Is Mandatory</label>
-              <select id="isMandatory" name="isMandatory" value={formData.isMandatory} onChange={handleChange}>
+              <select
+                id="isMandatory"
+                name="isMandatory"
+                value={formData.isMandatory}
+                onChange={handleChange}
+                disabled={mandatoryLockedByParent}
+                className={errors.isMandatory ? 'error' : ''}
+              >
                 {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
+              {mandatoryLockedByParent && (
+                <small>Disabled: parent question {parentQuestion.questionId} is not mandatory, so this child cannot be mandatory.</small>
+              )}
+              {errors.isMandatory && <span className="error-text">{errors.isMandatory}</span>}
             </div>
 
             <div className="form-group">
