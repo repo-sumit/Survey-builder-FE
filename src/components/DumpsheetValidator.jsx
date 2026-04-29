@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useToast } from './Toast';
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 function formatError(err, fallback = '') {
   if (typeof err === 'string') return err;
@@ -102,6 +103,7 @@ const DumpsheetValidator = () => {
 
       const response = await axios.post('/api/import/validate-dump', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: UPLOAD_TIMEOUT_MS,
       });
 
       setReport(response.data);

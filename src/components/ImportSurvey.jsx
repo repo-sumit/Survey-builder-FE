@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useToast } from './Toast';
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 // Extract error message from either a string or { field, message, value } object
 function formatError(err, fallback = '') {
@@ -141,6 +142,7 @@ const ImportSurvey = () => {
 
       const response = await axios.post('/api/import/preview', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: UPLOAD_TIMEOUT_MS,
       });
 
       const data = response.data || {};
@@ -182,6 +184,7 @@ const ImportSurvey = () => {
 
       const response = await axios.post(`/api/import?${params.toString()}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: UPLOAD_TIMEOUT_MS,
       });
 
       setResult(response.data);
