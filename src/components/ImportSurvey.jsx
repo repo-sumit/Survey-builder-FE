@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useToast } from './Toast';
+import WaterAnimation from './WaterAnimation';
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
@@ -398,6 +399,7 @@ const ImportSurvey = () => {
             </button>
           )}
         </div>
+        <WaterAnimation active={previewing || importing} />
       </div>
 
       {/* Survey selection list */}
