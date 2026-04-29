@@ -527,7 +527,7 @@ const ImportSurvey = () => {
                       <input
                         type="text"
                         className="errors-table-filter-input"
-                        placeholder="Filter…"
+                        placeholder="Search…"
                         value={columnFilters[col]}
                         onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
                       />
