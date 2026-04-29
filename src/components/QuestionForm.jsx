@@ -26,8 +26,10 @@ const parseTableQuestions = (str) => {
 
 const formatTableHeaders = (headers) => headers.filter(h => h?.trim()).join(', ');
 
-const formatTableQuestions = (questions) =>
-  questions.map((q, i) => `${getRowLabel(i)}:${q.text}`).join('\n');
+const formatTableQuestions = (questions) => {
+  if (!questions.some(q => (q?.text || '').trim() !== '')) return '';
+  return questions.map((q, i) => `${getRowLabel(i)}:${q?.text || ''}`).join('\n');
+};
 
 const QuestionForm = () => {
   const navigate = useNavigate();
@@ -218,35 +220,14 @@ const QuestionForm = () => {
     return existingQuestions.find(q => q.surveyId === surveyId && q.questionId === parentId) || null;
   };
 
-  const getOptionsList = (question) => {
-    if (!question) return [];
-    if (Array.isArray(question.options) && question.options.length > 0) return question.options;
-    const t = question.translations || {};
-    if (t.English?.options) return t.English.options;
-    const first = Object.keys(t)[0];
-    return t[first]?.options || [];
-  };
-
-  const countOptionsWithChildren = (question) => {
-    return getOptionsList(question).reduce((acc, opt) => {
-      const list = String(opt?.children || '').split(',').map(s => s.trim()).filter(Boolean);
-      return acc + (list.length > 0 ? 1 : 0);
-    }, 0);
-  };
-
   const parentQuestion = resolveParentQuestion();
   const isChildQuestion = String(formData.questionId || '').includes('.');
   const parentIsMandatory = parentQuestion?.isMandatory === 'Yes';
-  const parentOptionsWithChildrenCount = parentQuestion ? countOptionsWithChildren(parentQuestion) : 0;
-  const parentHasMultiOptionChildren = parentOptionsWithChildrenCount >= 2;
-  const mandatoryLockedByParent = isChildQuestion && parentQuestion != null
-    && (!parentIsMandatory || parentHasMultiOptionChildren);
+  const mandatoryLockedByParent = isChildQuestion && parentQuestion != null && !parentIsMandatory;
 
-  const mandatoryLockReason = !mandatoryLockedByParent ? '' : (
-    parentHasMultiOptionChildren
-      ? `Parent ${parentQuestion.questionId} branches into ${parentOptionsWithChildrenCount} options with child questions, so no child of ${parentQuestion.questionId} can be mandatory.`
-      : `Parent ${parentQuestion.questionId} is not mandatory, so this child cannot be mandatory.`
-  );
+  const mandatoryLockReason = mandatoryLockedByParent
+    ? `Parent ${parentQuestion.questionId} is not mandatory, so this child cannot be mandatory.`
+    : '';
 
   useEffect(() => {
     if (mandatoryLockedByParent && formData.isMandatory === 'Yes') {
@@ -576,19 +557,10 @@ const QuestionForm = () => {
         setSubmitError('Only Multiple Choice Single Select questions can have child questions. Change the Question ID or parent.');
         return;
       }
-      if (parentQ && payload.isMandatory === 'Yes') {
-        const parentOptionsCount = countOptionsWithChildren(parentQ);
-        if (parentOptionsCount >= 2) {
-          const msg = `Child cannot be mandatory: parent ${parentQ.questionId} has child questions mapped to ${parentOptionsCount} different options, so none of its children can be mandatory.`;
-          setErrors({ isMandatory: msg });
-          setSubmitError(msg);
-          return;
-        }
-        if (parentQ.isMandatory !== 'Yes') {
-          setErrors({ isMandatory: `Child question cannot be mandatory because parent ${parentQ.questionId} is not mandatory.` });
-          setSubmitError(`Child question cannot be marked mandatory: parent question ${parentQ.questionId} is not mandatory. Set the parent to mandatory first, or set this child to "No".`);
-          return;
-        }
+      if (parentQ && payload.isMandatory === 'Yes' && parentQ.isMandatory !== 'Yes') {
+        setErrors({ isMandatory: `Child question cannot be mandatory because parent ${parentQ.questionId} is not mandatory.` });
+        setSubmitError(`Child question cannot be marked mandatory: parent question ${parentQ.questionId} is not mandatory. Set the parent to mandatory first, or set this child to "No".`);
+        return;
       }
     }
 

@@ -142,10 +142,7 @@ export const useValidation = () => {
       if (!questionData.tableHeaderValue || questionData.tableHeaderValue.trim() === '') {
         newErrors.tableHeaderValue = 'Table Header Value is required for tabular questions';
       }
-      if (!questionData.tableQuestionValue || questionData.tableQuestionValue.trim() === '') {
-        newErrors.tableQuestionValue = 'Table Question Value is required for tabular questions';
-      } else {
-        // Validate format
+      if (questionData.tableQuestionValue && questionData.tableQuestionValue.trim() !== '') {
         if (!validateTableQuestionFormat(questionData.tableQuestionValue)) {
           newErrors.tableQuestionValue = 'Format must be: a:Question 1\\nb:Question 2';
         }
@@ -190,7 +187,9 @@ export const useValidation = () => {
   };
 
   const validateTableQuestionFormat = (value) => {
-    return PATTERNS.TABLE_QUESTION_FORMAT.test(value);
+    // Treat literal "\n" (backslash-n) as a real line break before testing.
+    const normalized = String(value).replace(/\\n/g, '\n');
+    return PATTERNS.TABLE_QUESTION_FORMAT.test(normalized);
   };
 
   const clearErrors = () => {

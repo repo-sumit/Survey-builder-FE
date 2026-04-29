@@ -34,7 +34,7 @@ export const PATTERNS = {
   QUESTION_ID: /^Q\d+(\.\d+)*$/,
   DATE_FORMAT: /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2}:\d{2})?$/,
   YOUTUBE_URL: /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/,
-  TABLE_QUESTION_FORMAT: /^[a-z]:.+(\n[a-z]:.+)*$/
+  TABLE_QUESTION_FORMAT: /^[A-Za-z]:.*(\n[A-Za-z]:.*)*$/
 };
 
 // Length constraints

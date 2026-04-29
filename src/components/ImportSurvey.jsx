@@ -92,6 +92,7 @@ const ImportSurvey = () => {
   const [errors, setErrors] = useState(null);
   const [overwrite, setOverwrite] = useState(false);
   const [errorFilter, setErrorFilter] = useState('all'); // 'all' | 'survey' | 'question'
+  const [columnFilters, setColumnFilters] = useState({ surveyId: '', type: '', row: '', id: '', errors: '' });
 
   const resetAll = () => {
     setPreview(null);
@@ -99,6 +100,7 @@ const ImportSurvey = () => {
     setResult(null);
     setErrors(null);
     setErrorFilter('all');
+    setColumnFilters({ surveyId: '', type: '', row: '', id: '', errors: '' });
   };
 
   const handleFileChange = (e) => {
@@ -234,14 +236,30 @@ const ImportSurvey = () => {
   const sourceErrors = errors?.validationErrors || preview?.validationErrors || [];
 
   // Filter errors to selected surveys (when we have a selection) and apply the
-  // type filter (survey / question / all).
+  // type filter (survey / question / all) plus the per-column text filters.
   const filteredErrors = useMemo(() => {
+    const lc = (s) => String(s ?? '').toLowerCase();
+    const cf = {
+      surveyId: lc(columnFilters.surveyId),
+      type: lc(columnFilters.type),
+      row: lc(columnFilters.row),
+      id: lc(columnFilters.id),
+      errors: lc(columnFilters.errors),
+    };
     return sourceErrors.filter(e => {
       if (selectedIds.size > 0 && e.surveyId && !selectedIds.has(e.surveyId)) return false;
       if (errorFilter !== 'all' && e.type !== errorFilter) return false;
+      if (cf.surveyId && !lc(e.surveyId).includes(cf.surveyId)) return false;
+      if (cf.type && !lc(e.type).includes(cf.type)) return false;
+      if (cf.row && !lc(e.index ?? e.row ?? '').includes(cf.row)) return false;
+      if (cf.id && !lc(e.questionId || e.surveyId || '').includes(cf.id)) return false;
+      if (cf.errors) {
+        const text = (e.errors || []).map(x => formatError(x)).join(' ').toLowerCase();
+        if (!text.includes(cf.errors)) return false;
+      }
       return true;
     });
-  }, [sourceErrors, selectedIds, errorFilter]);
+  }, [sourceErrors, selectedIds, errorFilter, columnFilters]);
 
   // Per-survey error counts for the selection list
   const errorCountsBySurvey = useMemo(() => {
@@ -499,6 +517,19 @@ const ImportSurvey = () => {
                   <th>Row</th>
                   <th>ID</th>
                   <th>Errors</th>
+                </tr>
+                <tr className="errors-table-filter-row">
+                  {['surveyId', 'type', 'row', 'id', 'errors'].map(col => (
+                    <th key={col}>
+                      <input
+                        type="text"
+                        className="errors-table-filter-input"
+                        placeholder="Filter…"
+                        value={columnFilters[col]}
+                        onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                      />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
