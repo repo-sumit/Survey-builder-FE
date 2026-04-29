@@ -552,23 +552,6 @@ const QuestionForm = () => {
         return;
       }
       const parentQ = existingQuestions.find(q => q.surveyId === surveyId && q.questionId === parentId);
-      if (parentQ && parentQ.questionType !== 'Multiple Choice Single Select') {
-        const parentOptions = parentQ.options
-          || parentQ.translations?.English?.options
-          || parentQ.translations?.[Object.keys(parentQ.translations || {})[0]]?.options
-          || [];
-        const claims = parentOptions.some(opt =>
-          String(opt?.children || '')
-            .split(',')
-            .map(s => normalizeQuestionId(s))
-            .includes(payload.questionId)
-        );
-        if (claims) {
-          setErrors({ questionId: 'Child questions can only belong to Multiple Choice Single Select questions.' });
-          setSubmitError('Only Multiple Choice Single Select questions can have child questions. Change the Question ID or parent.');
-          return;
-        }
-      }
       if (parentQ && payload.isMandatory === 'Yes' && parentQ.isMandatory !== 'Yes') {
         setErrors({ isMandatory: `Child question cannot be mandatory because parent ${parentQ.questionId} is not mandatory.` });
         setSubmitError(`Child question cannot be marked mandatory: parent question ${parentQ.questionId} is not mandatory. Set the parent to mandatory first, or set this child to "No".`);
