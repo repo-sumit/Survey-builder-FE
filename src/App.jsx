@@ -34,6 +34,7 @@ const QuestionList = lazy(() => import('./components/QuestionList'));
 const QuestionForm = lazy(() => import('./components/QuestionForm'));
 const SurveyPreview = lazy(() => import('./components/preview/SurveyPreview'));
 const ImportSurvey = lazy(() => import('./components/ImportSurvey'));
+const DumpsheetValidator = lazy(() => import('./components/DumpsheetValidator'));
 const DesignationMapping = lazy(() => import('./components/DesignationMapping'));
 const AccessSheet = lazy(() => import('./components/AccessSheet'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
@@ -167,6 +168,7 @@ function App() {
                         <Route path="/surveys/:surveyId/questions/:questionId/edit" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
                         <Route path="/surveys/:surveyId/preview" element={<StateOnlyRoute><SurveyPreview /></StateOnlyRoute>} />
                         <Route path="/import" element={<StateOnlyRoute><ImportSurvey /></StateOnlyRoute>} />
+                        <Route path="/validator" element={<StateOnlyRoute><DumpsheetValidator /></StateOnlyRoute>} />
                         <Route path="/designations" element={<StateOnlyRoute><DesignationMapping /></StateOnlyRoute>} />
                         <Route path="/access-sheet" element={<StateOnlyRoute><AccessSheet /></StateOnlyRoute>} />
 
