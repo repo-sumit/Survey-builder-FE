@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useToast } from './Toast';
@@ -43,58 +43,142 @@ function normalizeApiErrorPayload(payload, fallback = 'Import failed') {
   };
 }
 
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function buildErrorCsv(rows) {
+  const header = ['Survey ID', 'Type', 'Row', 'ID', 'Errors'];
+  const lines = [header.map(csvEscape).join(',')];
+  rows.forEach(row => {
+    const errorsText = (row.errors || []).map(e => formatError(e)).join(' | ');
+    lines.push([
+      row.surveyId || '',
+      row.type || '',
+      row.index ?? row.row ?? '',
+      row.questionId || row.surveyId || '',
+      errorsText
+    ].map(csvEscape).join(','));
+  });
+  return lines.join('\r\n');
+}
+
+function downloadBlob(content, filename, type = 'text/csv;charset=utf-8') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 const ImportSurvey = () => {
   const navigate = useNavigate();
   const toast = useToast();
-  const [file, setFile]           = useState(null);
+  const [file, setFile] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [result, setResult]       = useState(null);
-  const [errors, setErrors]       = useState(null);
+  const [preview, setPreview] = useState(null);          // { surveys, questions, validationErrors, ... }
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [result, setResult] = useState(null);
+  const [errors, setErrors] = useState(null);
   const [overwrite, setOverwrite] = useState(false);
-  const [errorFilter, setErrorFilter] = useState('all'); // 'all', 'survey', 'question'
+  const [errorFilter, setErrorFilter] = useState('all'); // 'all' | 'survey' | 'question'
+
+  const resetAll = () => {
+    setPreview(null);
+    setSelectedIds(new Set());
+    setResult(null);
+    setErrors(null);
+    setErrorFilter('all');
+  };
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      const ext = selectedFile.name.split('.').pop().toLowerCase();
-      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-        if (selectedFile.size > MAX_IMPORT_FILE_SIZE_BYTES) {
-          setFile(null);
-          setResult(null);
-          setErrors({
-            error: `File is too large. Maximum supported size is ${Math.round(MAX_IMPORT_FILE_SIZE_BYTES / (1024 * 1024))} MB.`,
-            message: 'Please split the workbook/CSV into smaller files and retry.'
-          });
-          e.target.value = '';
-          return;
-        }
-        setFile(selectedFile);
-        setErrors(null);
-        setResult(null);
-      } else {
-        toast.error('Please select a valid XLSX or CSV file');
-        e.target.value = '';
-      }
+    if (!selectedFile) return;
+
+    const ext = selectedFile.name.split('.').pop().toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+      toast.error('Please select a valid XLSX or CSV file');
+      e.target.value = '';
+      return;
     }
+    if (selectedFile.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+      setFile(null);
+      resetAll();
+      setErrors({
+        error: `File is too large. Maximum supported size is ${Math.round(MAX_IMPORT_FILE_SIZE_BYTES / (1024 * 1024))} MB.`,
+        message: 'Please split the workbook/CSV into smaller files and retry.'
+      });
+      e.target.value = '';
+      return;
+    }
+    setFile(selectedFile);
+    resetAll();
   };
 
-  const handleImport = async () => {
+  const handlePreview = async () => {
     if (!file) {
       toast.error('Please select a file to import');
       return;
     }
-
     try {
-      setImporting(true);
-      setErrors(null);
-      setResult(null);
-      setErrorFilter('all');
+      setPreviewing(true);
+      resetAll();
 
       const formData = new FormData();
       formData.append('file', file);
 
-      const importUrl = overwrite ? '/api/import?overwrite=true' : '/api/import';
-      const response = await axios.post(importUrl, formData, {
+      const response = await axios.post('/api/import/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const data = response.data || {};
+      setPreview(data);
+      setSelectedIds(new Set((data.surveys || []).map(s => s.surveyId)));
+    } catch (err) {
+      console.error('Preview error:', err);
+      const responseData = err.response?.data;
+      if (responseData) {
+        setErrors(normalizeApiErrorPayload(responseData, 'Preview failed'));
+      } else {
+        setErrors({ error: formatError(err.message, 'Failed to preview file') });
+      }
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const handleCommitImport = async () => {
+    if (!file) {
+      toast.error('Please select a file to import');
+      return;
+    }
+    if (selectedIds.size === 0) {
+      toast.error('Select at least one survey to import');
+      return;
+    }
+    try {
+      setImporting(true);
+      setErrors(null);
+      setResult(null);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const params = new URLSearchParams();
+      if (overwrite) params.set('overwrite', 'true');
+      params.set('surveyIds', Array.from(selectedIds).join(','));
+
+      const response = await axios.post(`/api/import?${params.toString()}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -109,7 +193,6 @@ const ImportSurvey = () => {
     } catch (err) {
       console.error('Import error:', err);
       const responseData = err.response?.data;
-
       if (responseData?.validationErrors) {
         setErrors({
           ...responseData,
@@ -117,7 +200,6 @@ const ImportSurvey = () => {
           message: formatError(responseData.message, '')
         });
       } else if (responseData) {
-        // Structured error without validationErrors (e.g., missing sheets, parse errors)
         setErrors(normalizeApiErrorPayload(responseData, 'Import failed'));
       } else {
         setErrors({ error: formatError(err.message, 'Failed to import file') });
@@ -127,12 +209,69 @@ const ImportSurvey = () => {
     }
   };
 
-  const filteredErrors = errors?.validationErrors?.filter(e =>
-    errorFilter === 'all' || e.type === errorFilter
-  ) || [];
+  const toggleSurvey = (surveyId) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(surveyId)) next.delete(surveyId);
+      else next.add(surveyId);
+      return next;
+    });
+  };
 
-  const surveyErrorCount = errors?.validationErrors?.filter(e => e.type === 'survey').length || 0;
-  const questionErrorCount = errors?.validationErrors?.filter(e => e.type === 'question').length || 0;
+  const toggleAll = () => {
+    if (!preview?.surveys) return;
+    const all = preview.surveys.map(s => s.surveyId);
+    if (selectedIds.size === all.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(all));
+    }
+  };
+
+  // Combined source of validation errors: prefer the commit response when
+  // available (it reflects what the server actually saw on the import attempt),
+  // otherwise fall back to the preview's full error list.
+  const sourceErrors = errors?.validationErrors || preview?.validationErrors || [];
+
+  // Filter errors to selected surveys (when we have a selection) and apply the
+  // type filter (survey / question / all).
+  const filteredErrors = useMemo(() => {
+    return sourceErrors.filter(e => {
+      if (selectedIds.size > 0 && e.surveyId && !selectedIds.has(e.surveyId)) return false;
+      if (errorFilter !== 'all' && e.type !== errorFilter) return false;
+      return true;
+    });
+  }, [sourceErrors, selectedIds, errorFilter]);
+
+  // Per-survey error counts for the selection list
+  const errorCountsBySurvey = useMemo(() => {
+    const counts = {};
+    sourceErrors.forEach(e => {
+      const id = e.surveyId || '(unknown)';
+      counts[id] = (counts[id] || 0) + 1;
+    });
+    return counts;
+  }, [sourceErrors]);
+
+  const selectedHaveErrors = useMemo(() => {
+    return Array.from(selectedIds).some(id => (errorCountsBySurvey[id] || 0) > 0);
+  }, [selectedIds, errorCountsBySurvey]);
+
+  const surveyErrorCount = sourceErrors.filter(e => e.type === 'survey'
+    && (selectedIds.size === 0 || !e.surveyId || selectedIds.has(e.surveyId))).length;
+  const questionErrorCount = sourceErrors.filter(e => e.type === 'question'
+    && (selectedIds.size === 0 || !e.surveyId || selectedIds.has(e.surveyId))).length;
+  const visibleTotal = surveyErrorCount + questionErrorCount;
+
+  const handleDownloadCsv = () => {
+    if (filteredErrors.length === 0) {
+      toast.info('No errors to download');
+      return;
+    }
+    const csv = buildErrorCsv(filteredErrors);
+    const baseName = (file?.name || 'import').replace(/\.[^.]+$/, '');
+    downloadBlob(`﻿${csv}`, `${baseName}-validation-errors.csv`);
+  };
 
   return (
     <div className="import-survey-container">
@@ -160,7 +299,7 @@ const ImportSurvey = () => {
           <li>Upload an XLSX file containing both <strong>Survey Master</strong> and <strong>Question Master</strong> sheets</li>
           <li>Or upload separate CSV files for Survey Master or Question Master</li>
           <li>Multi-language surveys are supported — questions with the same Survey_ID, Question_ID, and Question_Type will be grouped</li>
-          <li>All data will be validated before import</li>
+          <li>Click <strong>Preview</strong> first to see the parsed surveys; pick which ones to import</li>
           <li>By default, existing Survey IDs are rejected to prevent accidental data loss</li>
           <li>Enable overwrite only when you want to replace existing surveys and their questions</li>
         </ul>
@@ -176,7 +315,7 @@ const ImportSurvey = () => {
             id="overwriteCheck"
             checked={overwrite}
             onChange={e => setOverwrite(e.target.checked)}
-            disabled={importing}
+            disabled={importing || previewing}
             style={{ marginTop: '0.2rem', width: 'auto', accentColor: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }}
           />
           <div>
@@ -209,7 +348,7 @@ const ImportSurvey = () => {
             accept=".xlsx,.xls,.csv"
             onChange={handleFileChange}
             className="file-input"
-            disabled={importing}
+            disabled={importing || previewing}
           />
           {file && (
             <div className="file-selected">
@@ -219,15 +358,68 @@ const ImportSurvey = () => {
           )}
         </div>
 
-        <button
-          className="btn btn-primary btn-cta btn-icon-import"
-          onClick={handleImport}
-          disabled={!file || importing}
-          style={{ marginTop: '0.5rem' }}
-        >
-          {importing ? 'Importing\u2026' : 'Import Survey'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-primary btn-cta"
+            onClick={handlePreview}
+            disabled={!file || previewing || importing}
+          >
+            {previewing ? 'Parsing…' : (preview ? 'Re-parse File' : 'Preview File')}
+          </button>
+          {preview && (
+            <button
+              className="btn btn-success btn-cta btn-icon-import"
+              onClick={handleCommitImport}
+              disabled={importing || previewing || selectedIds.size === 0 || selectedHaveErrors}
+              title={selectedHaveErrors ? 'Fix or unselect surveys with errors first' : ''}
+            >
+              {importing ? 'Importing…' : `Import Selected (${selectedIds.size})`}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Survey selection list */}
+      {preview && preview.surveys && preview.surveys.length > 0 && (
+        <div className="import-survey-picker">
+          <div className="import-survey-picker-header">
+            <h3>Select surveys to import</h3>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={toggleAll}
+            >
+              {selectedIds.size === preview.surveys.length ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+          <p className="error-summary" style={{ marginBottom: '0.75rem' }}>
+            Found {preview.surveys.length} survey(s) and {preview.questions?.length || 0} question(s) in the file.
+            {selectedHaveErrors && ' One or more selected surveys have validation errors — fix them or unselect those surveys before importing.'}
+          </p>
+          <div className="survey-checkbox-list">
+            {preview.surveys.map(s => {
+              const errCount = errorCountsBySurvey[s.surveyId] || 0;
+              const checked = selectedIds.has(s.surveyId);
+              return (
+                <label key={s.surveyId} className={`survey-checkbox-row ${errCount > 0 ? 'has-errors' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleSurvey(s.surveyId)}
+                  />
+                  <span className="survey-checkbox-id"><code>{s.surveyId}</code></span>
+                  <span className="survey-checkbox-name">{s.surveyName || ''}</span>
+                  {errCount > 0 && (
+                    <span className="survey-checkbox-error-badge">
+                      {errCount} error{errCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Success */}
       {result && (
@@ -252,14 +444,25 @@ const ImportSurvey = () => {
       )}
 
       {/* Validation Errors */}
-      {errors && errors.validationErrors && errors.validationErrors.length > 0 && (
+      {sourceErrors.length > 0 && (
         <div className="import-errors">
-          <h3>Validation Errors</h3>
-          <p className="error-summary">
-            Found {errors.validationErrors.length} issue(s) across{' '}
-            {errors.surveysCount} survey(s) and {errors.questionsCount} question(s).
-            No data was imported.
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3>Validation Errors</h3>
+              <p className="error-summary">
+                Showing {filteredErrors.length} of {sourceErrors.length} issue(s)
+                {selectedIds.size > 0 ? ' — filtered to selected survey(s).' : '.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={handleDownloadCsv}
+              disabled={filteredErrors.length === 0}
+            >
+              Download CSV
+            </button>
+          </div>
 
           {/* Filter tabs */}
           <div className="error-filter-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -267,7 +470,7 @@ const ImportSurvey = () => {
               className={`btn btn-sm ${errorFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setErrorFilter('all')}
             >
-              All ({errors.validationErrors.length})
+              All ({visibleTotal})
             </button>
             {surveyErrorCount > 0 && (
               <button
@@ -291,6 +494,7 @@ const ImportSurvey = () => {
             <table className="errors-table">
               <thead>
                 <tr>
+                  <th>Survey ID</th>
                   <th>Type</th>
                   <th>Row</th>
                   <th>ID</th>
@@ -300,12 +504,13 @@ const ImportSurvey = () => {
               <tbody>
                 {filteredErrors.map((error, idx) => (
                   <tr key={idx}>
+                    <td><code>{error.surveyId || ''}</code></td>
                     <td><span className={`sheet-badge sheet-badge-${error.type}`}>{error.type}</span></td>
-                    <td>{error.index}</td>
-                    <td><code>{error.surveyId || error.questionId}</code></td>
+                    <td>{error.index ?? error.row ?? ''}</td>
+                    <td><code>{error.questionId || error.surveyId || ''}</code></td>
                     <td>
                       <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
-                        {error.errors.map((err, errIdx) => (
+                        {(error.errors || []).map((err, errIdx) => (
                           <li key={errIdx}>{formatError(err)}</li>
                         ))}
                       </ul>
