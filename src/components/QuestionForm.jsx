@@ -299,6 +299,49 @@ const QuestionForm = () => {
     }
   };
 
+  // Auto-prefix child IDs with the parent question ID (e.g. "Q2.") so the user
+  // only types the trailing segment. Active only for Multiple Choice Single
+  // Select questions where the parent ID is known.
+  const childAutoPrefix = (() => {
+    if (formData.questionType !== 'Multiple Choice Single Select') return '';
+    const normalized = normalizeQuestionId(formData.questionId);
+    return normalized ? `${normalized}.` : '';
+  })();
+
+  const moveCaretToEnd = (input, length) => {
+    if (!input) return;
+    requestAnimationFrame(() => {
+      try { input.setSelectionRange(length, length); } catch (_e) { /* ignore unsupported types */ }
+    });
+  };
+
+  const handleChildFocus = (event, index) => {
+    if (!childAutoPrefix) return;
+    const input = event.target;
+    const current = String(formData.options?.[index]?.children || '').trim();
+    if (current === '') {
+      handleOptionChange(index, 'children', childAutoPrefix);
+      moveCaretToEnd(input, childAutoPrefix.length);
+    }
+  };
+
+  const handleChildChange = (event, index) => {
+    const newValue = event.target.value;
+    const input = event.target;
+    if (!childAutoPrefix) {
+      handleOptionChange(index, 'children', newValue);
+      return;
+    }
+    const oldValue = formData.options?.[index]?.children || '';
+    if (newValue.endsWith(',') && !oldValue.endsWith(',')) {
+      const finalValue = `${newValue}${childAutoPrefix}`;
+      handleOptionChange(index, 'children', finalValue);
+      moveCaretToEnd(input, finalValue.length);
+      return;
+    }
+    handleOptionChange(index, 'children', newValue);
+  };
+
   const addOption = () => {
     const maxOptions = fieldConfig?.maxOptions || 20;
     if ((formData.options || []).length >= maxOptions) {
@@ -854,8 +897,11 @@ const QuestionForm = () => {
                         type="text"
                         className="options-table-child-input"
                         value={option?.children || ''}
-                        onChange={(e) => handleOptionChange(index, 'children', e.target.value)}
-                        placeholder="e.g., 1.1, 1.2"
+                        onFocus={(e) => handleChildFocus(e, index)}
+                        onChange={(e) => handleChildChange(e, index)}
+                        placeholder={childAutoPrefix
+                          ? `e.g., ${childAutoPrefix}1, ${childAutoPrefix}2`
+                          : 'e.g., 1.1, 1.2'}
                       />
                     </div>
                   )}
