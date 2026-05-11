@@ -110,7 +110,9 @@ const QuestionList = () => {
     try {
       const duplicatedQuestion = await questionAPI.duplicate(surveyId, questionId, normalizedQuestionId);
       queryClient.invalidateQueries({ queryKey: ['questions', surveyId] });
-      toast.success(`Question duplicated successfully as ${duplicatedQuestion.questionId}`);
+      const childCount = Array.isArray(duplicatedQuestion?.duplicatedChildren) ? duplicatedQuestion.duplicatedChildren.length : 0;
+      const childSuffix = childCount > 0 ? ` (and ${childCount} child question${childCount > 1 ? 's' : ''})` : '';
+      toast.success(`Question duplicated as ${duplicatedQuestion.questionId}${childSuffix}`);
       navigate(`/surveys/${surveyId}/questions/${duplicatedQuestion.questionId}/edit`);
     } catch (err) {
       const data = err.response?.data;

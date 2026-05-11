@@ -31,8 +31,8 @@ const AdminPanel = () => {
   const [usersError, setUsersError]     = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingUser, setEditingUser]   = useState(null);
-  const [createForm, setCreateForm]     = useState({ username: '', password: '', role: 'state', stateCode: '', isActive: true });
-  const [editForm, setEditForm]         = useState({ password: '', role: '', stateCode: '', isActive: true });
+  const [createForm, setCreateForm]     = useState({ email: '', name: '', role: 'state', stateCode: '', isActive: true });
+  const [editForm, setEditForm]         = useState({ name: '', role: '', stateCode: '', isActive: true });
   const [usersFormError, setUsersFormError] = useState(null);
 
   /* ── Loaders ──────────────────────────────────────────────────── */
@@ -96,31 +96,43 @@ const AdminPanel = () => {
   /* ── User handlers ────────────────────────────────────────────── */
   const handleCreate = async (e) => {
     e.preventDefault(); setUsersFormError(null);
-    if (!createForm.username.trim() || !createForm.password.trim())
-      return setUsersFormError('Username and password are required');
+    const email = createForm.email.trim().toLowerCase();
+    const name = createForm.name.trim();
+    if (!email) return setUsersFormError('Email is required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return setUsersFormError('Email is not valid');
+    if (!name) return setUsersFormError('Name is required');
     if (createForm.role === 'state' && !createForm.stateCode.trim())
       return setUsersFormError('State code is required for state users');
     try {
       await adminAPI.createUser({
-        username: createForm.username.trim(), password: createForm.password,
-        role: createForm.role, stateCode: createForm.role === 'admin' ? null : createForm.stateCode.trim(),
+        email,
+        name,
+        role: createForm.role,
+        stateCode: createForm.role === 'admin' ? null : createForm.stateCode.trim(),
         isActive: createForm.isActive
       });
-      setCreateForm({ username: '', password: '', role: 'state', stateCode: '', isActive: true });
+      setCreateForm({ email: '', name: '', role: 'state', stateCode: '', isActive: true });
       setShowCreateForm(false); loadUsers();
     } catch (err) { setUsersFormError(err.response?.data?.error || 'Failed to create user'); }
   };
   const startEdit = (u) => {
     setEditingUser(u.id);
-    setEditForm({ password: '', role: u.role, stateCode: u.stateCode || '', isActive: u.isActive });
+    setEditForm({ name: u.name || '', role: u.role, stateCode: u.stateCode || '', isActive: u.isActive });
   };
   const handleUpdate = async (uid) => {
     setUsersFormError(null);
     const updates = { isActive: editForm.isActive, role: editForm.role };
-    if (editForm.password.trim()) updates.password = editForm.password;
+    if (editForm.name.trim()) updates.name = editForm.name.trim();
     if (editForm.role === 'state') updates.stateCode = editForm.stateCode.trim();
+    else updates.stateCode = null;
     try { await adminAPI.updateUser(uid, updates); setEditingUser(null); loadUsers(); }
     catch (err) { setUsersFormError(err.response?.data?.error || 'Failed to update user'); }
+  };
+
+  const formatDate = (iso) => {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString(); } catch { return iso; }
   };
 
   return (
@@ -287,25 +299,28 @@ const AdminPanel = () => {
 
           {showCreateForm && (
             <div className="admin-form-card">
-              <h3>Create New User</h3>
+              <h3>Invite New User</h3>
+              <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-3)', marginBottom: '1rem' }}>
+                Users sign in with Google. Their Google email must match the address below for access.
+              </p>
               <form onSubmit={handleCreate}>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Username</label>
+                    <label>Email</label>
                     <input
-                      type="text"
-                      value={createForm.username}
-                      onChange={e => setCreateForm(p => ({ ...p, username: e.target.value }))}
-                      placeholder="Enter username"
+                      type="email"
+                      value={createForm.email}
+                      onChange={e => setCreateForm(p => ({ ...p, email: e.target.value }))}
+                      placeholder="user@example.com"
                     />
                   </div>
                   <div className="form-group">
-                    <label>Password</label>
+                    <label>Name</label>
                     <input
-                      type="password"
-                      value={createForm.password}
-                      onChange={e => setCreateForm(p => ({ ...p, password: e.target.value }))}
-                      placeholder="Enter password"
+                      type="text"
+                      value={createForm.name}
+                      onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Full name"
                     />
                   </div>
                   <div className="form-group">
@@ -361,7 +376,7 @@ const AdminPanel = () => {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    {['ID', 'Username', 'Role', 'State Code', 'Status', 'Actions'].map(h => (
+                    {['Email', 'Name', 'Role', 'State Code', 'Status', 'Invited', 'Last Login', 'Actions'].map(h => (
                       <th key={h}>{h}</th>
                     ))}
                   </tr>
@@ -371,8 +386,16 @@ const AdminPanel = () => {
                     <tr key={u.id}>
                       {editingUser === u.id ? (
                         <>
-                          <td className="text-muted">{u.id}</td>
-                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{u.username}</td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{u.email}</td>
+                          <td>
+                            <input
+                              type="text"
+                              className="input-sm"
+                              value={editForm.name}
+                              onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                              placeholder="Name"
+                            />
+                          </td>
                           <td>
                             <select
                               style={{ width: 90 }}
@@ -404,16 +427,10 @@ const AdminPanel = () => {
                               <option value="inactive">Inactive</option>
                             </select>
                           </td>
+                          <td className="text-muted">{formatDate(u.invitedAt)}</td>
+                          <td className="text-muted">{formatDate(u.lastLoginAt)}</td>
                           <td>
                             <div className="admin-edit-actions">
-                              <input
-                                type="password"
-                                className="input-sm"
-                                style={{ width: 140 }}
-                                value={editForm.password}
-                                onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
-                                placeholder="New password (opt.)"
-                              />
                               <button className="btn btn-primary btn-sm btn-cta btn-icon-save" onClick={() => handleUpdate(u.id)}>Save</button>
                               <button className="btn btn-secondary btn-sm btn-cta btn-icon-cancel" onClick={() => setEditingUser(null)}>Cancel</button>
                             </div>
@@ -421,8 +438,8 @@ const AdminPanel = () => {
                         </>
                       ) : (
                         <>
-                          <td className="text-muted">{u.id}</td>
-                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{u.username}</td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{u.email}</td>
+                          <td>{u.name || <span className="text-muted">—</span>}</td>
                           <td>
                             <span className={`badge ${u.role === 'admin' ? 'badge-role-admin' : ''}`}>
                               {u.role}
@@ -434,6 +451,8 @@ const AdminPanel = () => {
                               {u.isActive ? 'Active' : 'Inactive'}
                             </span>
                           </td>
+                          <td className="text-muted">{formatDate(u.invitedAt)}</td>
+                          <td className="text-muted">{formatDate(u.lastLoginAt)}</td>
                           <td>
                             <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => startEdit(u)}>Edit</button>
                           </td>

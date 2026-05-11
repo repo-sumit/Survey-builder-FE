@@ -1,7 +1,7 @@
 import axios from 'axios';
+import { supabase, getAccessToken } from './supabaseClient';
 
 const API_BASE_URL = '/api';
-const AUTH_LOGIN_TIMEOUT_MS = 45000;
 const AUTH_WARMUP_TIMEOUT_MS = 15000;
 
 // Default timeout for all requests (30s)
@@ -9,23 +9,28 @@ axios.defaults.timeout = 30000;
 
 // --- Axios interceptors ---
 
-axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Pull the latest Supabase access token on every request. Supabase refreshes
+// the token transparently in the background, so a stale cached token would
+// break long sessions.
+axios.interceptors.request.use(async (config) => {
+  try {
+    const token = await getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (_err) {
+    // No session — let the request go through unauthenticated; the response
+    // interceptor will catch the 401.
   }
   return config;
 });
 
 axios.interceptors.response.use(
   response => response,
-  error => {
-    const requestUrl = typeof error.config?.url === 'string' ? error.config.url : '';
-    const isAuthLoginRequest = requestUrl.includes('/auth/login');
-
-    if (error.response?.status === 401 && !isAuthLoginRequest) {
-      localStorage.removeItem('token');
-      if (window.location.pathname !== '/login') {
+  async (error) => {
+    if (error.response?.status === 401) {
+      try { await supabase.auth.signOut(); } catch (_e) { /* ignore */ }
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
     }
@@ -36,18 +41,13 @@ axios.interceptors.response.use(
 // --- Auth API ---
 
 export const authAPI = {
-  login: async (username, password) => {
-    const response = await axios.post(
-      `${API_BASE_URL}/auth/login`,
-      { username, password },
-      { timeout: AUTH_LOGIN_TIMEOUT_MS }
-    );
+  me: async () => {
+    const response = await axios.get(`${API_BASE_URL}/auth/me`);
     return response.data;
   },
   warmup: async () => {
     await axios.get(`${API_BASE_URL}/health`, {
       timeout: AUTH_WARMUP_TIMEOUT_MS,
-      // No auth required and this endpoint is cache-safe to bypass.
       headers: { 'Cache-Control': 'no-cache' }
     });
     return true;
