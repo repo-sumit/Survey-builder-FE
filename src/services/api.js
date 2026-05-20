@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAccessToken, signOutSupabase, signInWithGoogle, isSupabaseConfigured } from './supabaseClient';
 
 const API_BASE_URL = '/api';
 const AUTH_LOGIN_TIMEOUT_MS = 45000;
@@ -9,8 +10,16 @@ axios.defaults.timeout = 30000;
 
 // --- Axios interceptors ---
 
-axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+// Request: prefer Supabase access token (Google sign-in path).
+// Fall back to the legacy JWT in localStorage during the dual-auth window.
+axios.interceptors.request.use(async (config) => {
+  let token = null;
+  if (isSupabaseConfigured) {
+    try { token = await getAccessToken(); } catch { /* ignore */ }
+  }
+  if (!token) {
+    token = localStorage.getItem('token');
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -19,12 +28,14 @@ axios.interceptors.request.use((config) => {
 
 axios.interceptors.response.use(
   response => response,
-  error => {
+  async (error) => {
     const requestUrl = typeof error.config?.url === 'string' ? error.config.url : '';
     const isAuthLoginRequest = requestUrl.includes('/auth/login');
 
     if (error.response?.status === 401 && !isAuthLoginRequest) {
+      // Clear both auth sources.
       localStorage.removeItem('token');
+      try { await signOutSupabase(); } catch { /* ignore */ }
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
@@ -44,6 +55,13 @@ export const authAPI = {
     );
     return response.data;
   },
+  loginWithGoogle: async (redirectTo) => {
+    return signInWithGoogle(redirectTo);
+  },
+  me: async () => {
+    const response = await axios.get(`${API_BASE_URL}/auth/me`);
+    return response.data.user;
+  },
   warmup: async () => {
     await axios.get(`${API_BASE_URL}/health`, {
       timeout: AUTH_WARMUP_TIMEOUT_MS,
@@ -61,12 +79,18 @@ export const adminAPI = {
     const response = await axios.get(`${API_BASE_URL}/admin/users`);
     return response.data;
   },
+  // createUser accepts either { email, name, role, stateCode } (invite)
+  // or { username, password, role, stateCode } (legacy) — see Survey-builder-BE/routes/admin.js.
   createUser: async (userData) => {
     const response = await axios.post(`${API_BASE_URL}/admin/users`, userData);
     return response.data;
   },
   updateUser: async (id, userData) => {
     const response = await axios.patch(`${API_BASE_URL}/admin/users/${id}`, userData);
+    return response.data;
+  },
+  attachEmail: async (id, { email, name }) => {
+    const response = await axios.post(`${API_BASE_URL}/admin/users/${id}/attach-email`, { email, name });
     return response.data;
   }
 };

@@ -11,6 +11,17 @@ const parseLangs = (str) =>
   (str || '').split(',').map(s => s.trim()).filter(Boolean);
 const joinLangs  = (arr) => arr.join(',');
 
+const SHOW_LEGACY_CREATE = (process.env.REACT_APP_LEGACY_LOGIN_VISIBLE || 'true').toLowerCase() !== 'false';
+
+const fmtDate = (v) => {
+  if (!v) return '—';
+  try {
+    return new Date(v).toLocaleString();
+  } catch {
+    return '—';
+  }
+};
+
 const AdminPanel = () => {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('states');
@@ -29,11 +40,19 @@ const AdminPanel = () => {
   const [users, setUsers]               = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError]     = useState(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [showLegacyCreate, setShowLegacyCreate] = useState(false);
   const [editingUser, setEditingUser]   = useState(null);
-  const [createForm, setCreateForm]     = useState({ username: '', password: '', role: 'state', stateCode: '', isActive: true });
-  const [editForm, setEditForm]         = useState({ password: '', role: '', stateCode: '', isActive: true });
+  const [inviteForm, setInviteForm] = useState({ email: '', name: '', role: 'state', stateCode: '', isActive: true });
+  const [legacyForm, setLegacyForm] = useState({ username: '', password: '', role: 'state', stateCode: '', isActive: true });
+  const [editForm, setEditForm]         = useState({ password: '', role: '', stateCode: '', name: '', isActive: true });
   const [usersFormError, setUsersFormError] = useState(null);
+
+  // Attach-email modal state
+  const [attachTarget, setAttachTarget] = useState(null);   // user row or null
+  const [attachForm, setAttachForm]     = useState({ email: '', name: '' });
+  const [attachError, setAttachError]   = useState(null);
+  const [attachSaving, setAttachSaving] = useState(false);
 
   /* ── Loaders ──────────────────────────────────────────────────── */
   const loadStates = useCallback(async () => {
@@ -94,33 +113,88 @@ const AdminPanel = () => {
   };
 
   /* ── User handlers ────────────────────────────────────────────── */
-  const handleCreate = async (e) => {
+  const handleInvite = async (e) => {
     e.preventDefault(); setUsersFormError(null);
-    if (!createForm.username.trim() || !createForm.password.trim())
-      return setUsersFormError('Username and password are required');
-    if (createForm.role === 'state' && !createForm.stateCode.trim())
-      return setUsersFormError('State code is required for state users');
+    const email = inviteForm.email.trim().toLowerCase();
+    if (!email) return setUsersFormError('Email is required');
+    if (inviteForm.role === 'state' && !inviteForm.stateCode)
+      return setUsersFormError('State is required for state users');
     try {
       await adminAPI.createUser({
-        username: createForm.username.trim(), password: createForm.password,
-        role: createForm.role, stateCode: createForm.role === 'admin' ? null : createForm.stateCode.trim(),
-        isActive: createForm.isActive
+        email,
+        name: inviteForm.name.trim() || null,
+        role: inviteForm.role,
+        stateCode: inviteForm.role === 'admin' ? null : inviteForm.stateCode
       });
-      setCreateForm({ username: '', password: '', role: 'state', stateCode: '', isActive: true });
-      setShowCreateForm(false); loadUsers();
+      setInviteForm({ email: '', name: '', role: 'state', stateCode: '', isActive: true });
+      setShowInviteForm(false);
+      toast.success(`Invite sent: ${email}`);
+      loadUsers();
+    } catch (err) {
+      setUsersFormError(err.response?.data?.error || 'Failed to invite user');
+    }
+  };
+
+  const handleLegacyCreate = async (e) => {
+    e.preventDefault(); setUsersFormError(null);
+    if (!legacyForm.username.trim() || !legacyForm.password.trim())
+      return setUsersFormError('Username and password are required');
+    if (legacyForm.role === 'state' && !legacyForm.stateCode)
+      return setUsersFormError('State is required for state users');
+    try {
+      await adminAPI.createUser({
+        username: legacyForm.username.trim(),
+        password: legacyForm.password,
+        role: legacyForm.role,
+        stateCode: legacyForm.role === 'admin' ? null : legacyForm.stateCode
+      });
+      setLegacyForm({ username: '', password: '', role: 'state', stateCode: '', isActive: true });
+      setShowLegacyCreate(false);
+      loadUsers();
     } catch (err) { setUsersFormError(err.response?.data?.error || 'Failed to create user'); }
   };
+
   const startEdit = (u) => {
     setEditingUser(u.id);
-    setEditForm({ password: '', role: u.role, stateCode: u.stateCode || '', isActive: u.isActive });
+    setEditForm({ password: '', role: u.role, stateCode: u.stateCode || '', name: u.name || '', isActive: u.isActive });
   };
   const handleUpdate = async (uid) => {
     setUsersFormError(null);
-    const updates = { isActive: editForm.isActive, role: editForm.role };
+    const updates = { isActive: editForm.isActive, role: editForm.role, name: editForm.name };
     if (editForm.password.trim()) updates.password = editForm.password;
-    if (editForm.role === 'state') updates.stateCode = editForm.stateCode.trim();
+    if (editForm.role === 'state') updates.stateCode = editForm.stateCode;
     try { await adminAPI.updateUser(uid, updates); setEditingUser(null); loadUsers(); }
     catch (err) { setUsersFormError(err.response?.data?.error || 'Failed to update user'); }
+  };
+
+  const openAttach = (u) => {
+    setAttachTarget(u);
+    setAttachForm({ email: '', name: u.name || '' });
+    setAttachError(null);
+  };
+  const handleAttach = async (e) => {
+    e.preventDefault();
+    if (!attachTarget) return;
+    const email = (attachForm.email || '').trim().toLowerCase();
+    if (!email) return setAttachError('Email is required');
+    try {
+      setAttachSaving(true);
+      await adminAPI.attachEmail(attachTarget.id, { email, name: attachForm.name.trim() || null });
+      setAttachTarget(null);
+      toast.success(`Linked ${attachTarget.username || `#${attachTarget.id}`} to ${email}`);
+      loadUsers();
+    } catch (err) {
+      setAttachError(err.response?.data?.error || 'Failed to attach email');
+    } finally {
+      setAttachSaving(false);
+    }
+  };
+
+  const authSourceBadge = (u) => {
+    if (u.email && u.username) return <span className="badge">Both</span>;
+    if (u.email)               return <span className="badge badge-state">Google</span>;
+    if (u.username)            return <span className="badge">Legacy</span>;
+    return <span className="text-muted">—</span>;
   };
 
   return (
@@ -273,29 +347,110 @@ const AdminPanel = () => {
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-1)' }}>
               User Management
             </h3>
-            <button
-              className={`btn btn-primary btn-sm btn-cta ${showCreateForm ? 'btn-icon-cancel' : 'btn-icon-create'}`}
-              onClick={() => setShowCreateForm(v => !v)}
-            >
-              {showCreateForm ? 'Cancel' : 'Create User'}
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className={`btn btn-primary btn-sm btn-cta ${showInviteForm ? 'btn-icon-cancel' : 'btn-icon-create'}`}
+                onClick={() => { setShowInviteForm(v => !v); setShowLegacyCreate(false); }}
+              >
+                {showInviteForm ? 'Cancel' : 'Invite User'}
+              </button>
+              {SHOW_LEGACY_CREATE && (
+                <button
+                  className="btn btn-secondary btn-sm btn-cta"
+                  onClick={() => { setShowLegacyCreate(v => !v); setShowInviteForm(false); }}
+                  title="Create a username/password user (legacy path)"
+                >
+                  {showLegacyCreate ? 'Hide legacy' : 'Legacy create'}
+                </button>
+              )}
+            </div>
           </div>
 
           {(usersError || usersFormError) && (
             <div className="error-message">{usersError || usersFormError}</div>
           )}
 
-          {showCreateForm && (
+          {showInviteForm && (
             <div className="admin-form-card">
-              <h3>Create New User</h3>
-              <form onSubmit={handleCreate}>
+              <h3>Invite User (Google Sign-In)</h3>
+              <p className="text-muted" style={{ marginTop: 0 }}>
+                The user will sign in via Google with this exact email. No password is needed.
+              </p>
+              <form onSubmit={handleInvite}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Email <span className="required">*</span></label>
+                    <input
+                      type="email"
+                      value={inviteForm.email}
+                      onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
+                      placeholder="someone@example.com"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Name</label>
+                    <input
+                      type="text"
+                      value={inviteForm.name}
+                      onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Display name (optional)"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Role</label>
+                    <select
+                      value={inviteForm.role}
+                      onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
+                    >
+                      <option value="state">State</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  {inviteForm.role === 'state' && (
+                    <div className="form-group">
+                      <label>State <span className="required">*</span></label>
+                      <select
+                        value={inviteForm.stateCode}
+                        onChange={e => setInviteForm(p => ({ ...p, stateCode: e.target.value }))}
+                      >
+                        <option value="">Select a state…</option>
+                        {states.map(s => (
+                          <option key={s.state_code} value={s.state_code}>
+                            {s.state_code} — {s.state_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <div className="form-actions">
+                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Send Invite</button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
+                    onClick={() => setShowInviteForm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {SHOW_LEGACY_CREATE && showLegacyCreate && (
+            <div className="admin-form-card">
+              <h3>Create Legacy User (username + password)</h3>
+              <p className="text-muted" style={{ marginTop: 0 }}>
+                Use only during the migration window. Prefer "Invite User" for new accounts.
+              </p>
+              <form onSubmit={handleLegacyCreate}>
                 <div className="form-row">
                   <div className="form-group">
                     <label>Username</label>
                     <input
                       type="text"
-                      value={createForm.username}
-                      onChange={e => setCreateForm(p => ({ ...p, username: e.target.value }))}
+                      value={legacyForm.username}
+                      onChange={e => setLegacyForm(p => ({ ...p, username: e.target.value }))}
                       placeholder="Enter username"
                     />
                   </div>
@@ -303,49 +458,44 @@ const AdminPanel = () => {
                     <label>Password</label>
                     <input
                       type="password"
-                      value={createForm.password}
-                      onChange={e => setCreateForm(p => ({ ...p, password: e.target.value }))}
+                      value={legacyForm.password}
+                      onChange={e => setLegacyForm(p => ({ ...p, password: e.target.value }))}
                       placeholder="Enter password"
                     />
                   </div>
                   <div className="form-group">
                     <label>Role</label>
                     <select
-                      value={createForm.role}
-                      onChange={e => setCreateForm(p => ({ ...p, role: e.target.value }))}
+                      value={legacyForm.role}
+                      onChange={e => setLegacyForm(p => ({ ...p, role: e.target.value }))}
                     >
                       <option value="state">State</option>
                       <option value="admin">Admin</option>
                     </select>
                   </div>
-                  {createForm.role === 'state' && (
+                  {legacyForm.role === 'state' && (
                     <div className="form-group">
-                      <label>State Code</label>
-                      <input
-                        type="text"
-                        value={createForm.stateCode}
-                        onChange={e => setCreateForm(p => ({ ...p, stateCode: e.target.value }))}
-                        placeholder="e.g., MH"
-                      />
+                      <label>State</label>
+                      <select
+                        value={legacyForm.stateCode}
+                        onChange={e => setLegacyForm(p => ({ ...p, stateCode: e.target.value }))}
+                      >
+                        <option value="">Select a state…</option>
+                        {states.map(s => (
+                          <option key={s.state_code} value={s.state_code}>
+                            {s.state_code} — {s.state_name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select
-                      value={createForm.isActive ? 'active' : 'inactive'}
-                      onChange={e => setCreateForm(p => ({ ...p, isActive: e.target.value === 'active' }))}
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </div>
                 </div>
                 <div className="form-actions">
-                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Create User</button>
+                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Create</button>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
-                    onClick={() => setShowCreateForm(false)}
+                    onClick={() => setShowLegacyCreate(false)}
                   >
                     Cancel
                   </button>
@@ -361,7 +511,7 @@ const AdminPanel = () => {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    {['ID', 'Username', 'Role', 'State Code', 'Status', 'Actions'].map(h => (
+                    {['ID', 'Identity', 'Auth', 'Role', 'State', 'Status', 'Invited / Last login', 'Actions'].map(h => (
                       <th key={h}>{h}</th>
                     ))}
                   </tr>
@@ -372,7 +522,18 @@ const AdminPanel = () => {
                       {editingUser === u.id ? (
                         <>
                           <td className="text-muted">{u.id}</td>
-                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{u.username}</td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>
+                            <div>{u.email || u.username || '—'}</div>
+                            <input
+                              type="text"
+                              className="input-sm"
+                              value={editForm.name}
+                              onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                              placeholder="Name"
+                              style={{ marginTop: '0.25rem' }}
+                            />
+                          </td>
+                          <td>{authSourceBadge(u)}</td>
                           <td>
                             <select
                               style={{ width: 90 }}
@@ -384,15 +545,17 @@ const AdminPanel = () => {
                             </select>
                           </td>
                           <td>
-                            {editForm.role === 'state'
-                              ? <input
-                                  type="text"
-                                  className="input-sm"
-                                  value={editForm.stateCode}
-                                  onChange={e => setEditForm(p => ({ ...p, stateCode: e.target.value }))}
-                                  placeholder="Code"
-                                />
-                              : <span className="text-muted">—</span>}
+                            {editForm.role === 'state' ? (
+                              <select
+                                value={editForm.stateCode}
+                                onChange={e => setEditForm(p => ({ ...p, stateCode: e.target.value }))}
+                              >
+                                <option value="">Select…</option>
+                                {states.map(s => (
+                                  <option key={s.state_code} value={s.state_code}>{s.state_code}</option>
+                                ))}
+                              </select>
+                            ) : <span className="text-muted">—</span>}
                           </td>
                           <td>
                             <select
@@ -404,16 +567,22 @@ const AdminPanel = () => {
                               <option value="inactive">Inactive</option>
                             </select>
                           </td>
+                          <td className="text-muted">
+                            <div>Inv: {fmtDate(u.invitedAt)}</div>
+                            <div>Last: {fmtDate(u.lastLoginAt)}</div>
+                          </td>
                           <td>
                             <div className="admin-edit-actions">
-                              <input
-                                type="password"
-                                className="input-sm"
-                                style={{ width: 140 }}
-                                value={editForm.password}
-                                onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
-                                placeholder="New password (opt.)"
-                              />
+                              {u.username && (
+                                <input
+                                  type="password"
+                                  className="input-sm"
+                                  style={{ width: 140 }}
+                                  value={editForm.password}
+                                  onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
+                                  placeholder="New password (opt.)"
+                                />
+                              )}
                               <button className="btn btn-primary btn-sm btn-cta btn-icon-save" onClick={() => handleUpdate(u.id)}>Save</button>
                               <button className="btn btn-secondary btn-sm btn-cta btn-icon-cancel" onClick={() => setEditingUser(null)}>Cancel</button>
                             </div>
@@ -422,7 +591,11 @@ const AdminPanel = () => {
                       ) : (
                         <>
                           <td className="text-muted">{u.id}</td>
-                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{u.username}</td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>
+                            <div>{u.email || u.username || '—'}</div>
+                            {u.name && <div className="text-muted" style={{ fontSize: '0.8rem' }}>{u.name}</div>}
+                          </td>
+                          <td>{authSourceBadge(u)}</td>
                           <td>
                             <span className={`badge ${u.role === 'admin' ? 'badge-role-admin' : ''}`}>
                               {u.role}
@@ -434,8 +607,23 @@ const AdminPanel = () => {
                               {u.isActive ? 'Active' : 'Inactive'}
                             </span>
                           </td>
+                          <td className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            <div>Inv: {fmtDate(u.invitedAt)}</div>
+                            <div>Last: {fmtDate(u.lastLoginAt)}</div>
+                          </td>
                           <td>
-                            <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => startEdit(u)}>Edit</button>
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => startEdit(u)}>Edit</button>
+                              {!u.email && (
+                                <button
+                                  className="btn btn-secondary btn-sm btn-cta"
+                                  onClick={() => openAttach(u)}
+                                  title="Attach an email so this user can sign in with Google"
+                                >
+                                  Convert
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </>
                       )}
@@ -445,6 +633,63 @@ const AdminPanel = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══════════ ATTACH EMAIL MODAL ══════════ */}
+      {attachTarget && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}
+          onClick={() => setAttachTarget(null)}
+        >
+          <div
+            className="admin-form-card"
+            style={{ maxWidth: '500px', width: '90%' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3>Convert "{attachTarget.username || `#${attachTarget.id}`}" to Google sign-in</h3>
+            <p className="text-muted">
+              Attaching an email lets this user sign in with Google. The username/password
+              login keeps working until you set <code>LEGACY_LOGIN_ENABLED=false</code>.
+            </p>
+            {attachError && <div className="error-message">{attachError}</div>}
+            <form onSubmit={handleAttach}>
+              <div className="form-group">
+                <label>Email <span className="required">*</span></label>
+                <input
+                  type="email"
+                  value={attachForm.email}
+                  onChange={e => setAttachForm(p => ({ ...p, email: e.target.value }))}
+                  placeholder="user@example.com"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>Name</label>
+                <input
+                  type="text"
+                  value={attachForm.name}
+                  onChange={e => setAttachForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder="Display name (optional)"
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary btn-sm btn-cta" disabled={attachSaving}>
+                  {attachSaving ? 'Saving…' : 'Attach Email'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
+                  onClick={() => setAttachTarget(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

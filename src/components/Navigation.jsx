@@ -83,7 +83,8 @@ const Navigation = () => {
         { to: '/access-sheet', label: 'Access Sheet', icon: <AccessSheetIcon /> }
       ];
 
-  const userInitial = user?.username?.[0]?.toUpperCase() || '?';
+  const displayName = user?.name || user?.email || user?.username || 'User';
+  const userInitial = (displayName[0] || '?').toUpperCase();
   const userRoleLabel = isAdmin ? 'Administrator' : `State: ${user?.stateCode || '-'}`;
 
   return (
@@ -97,7 +98,7 @@ const Navigation = () => {
           </div>
         </div>
         <div className="nav-mobile-right">
-          <span className="nav-mobile-user-badge">{user?.username || 'User'}</span>
+          <span className="nav-mobile-user-badge">{displayName}</span>
           <button className="nav-mobile-logout" onClick={logout} title="Sign Out">
             Sign Out
           </button>
@@ -128,7 +129,7 @@ const Navigation = () => {
           <div className="nav-user-card">
             <div className="nav-user-avatar">{userInitial}</div>
             <div className="nav-user-details">
-              <span className="nav-user-name">{user?.username}</span>
+              <span className="nav-user-name">{displayName}</span>
               <span className="nav-user-role">{userRoleLabel}</span>
             </div>
           </div>

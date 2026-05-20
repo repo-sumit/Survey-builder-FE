@@ -1,302 +1,355 @@
-# Survey Builder Frontend
+# Survey Builder Frontend (`fmb-survey-builder-client`)
 
-React-based admin UI for creating, editing, previewing, importing, and exporting surveys.  
-This frontend is designed to work with the **Survey Builder Backend** hosted separately at: `repo-sumit/Survey-builder-BE`.
+React 18 SPA (Create React App) for authoring, previewing, importing/exporting multi-language surveys. Talks to [`Survey-builder-BE`](../Survey-builder-BE) over `/api/*` — dev via CRA `proxy`, prod via Vercel `rewrites`.
 
-> **Key integration principle:** the app calls the API via a relative base path **`/api`** and relies on **dev proxy** (local) or **platform rewrites** (prod) to route traffic to the backend.
-
----
-
-## Tech Stack
-
-- **React (CRA / react-scripts)** — Single Page App
-- **React Router v6** — routing + protected routes
-- **Axios** — API client with auth interceptors
-- **react-datepicker** — calendar/date inputs
-- **Vercel rewrites** — `/api/*` → backend service (production)
-
-**Primary entry points**
-- `src/index.jsx` — React bootstrap
-- `src/App.jsx` — route map + layout shell
+> Project-wide overview: [root README](../README.md).
 
 ---
 
-## Core Capabilities (What this UI does)
+## 1. Stack
 
-### Survey lifecycle
-- Create survey (metadata/config)
-- Edit survey
-- List surveys
-- Delete survey (with confirmation)
-- Duplicate survey (create a new surveyId based on an existing one)
-- Publish / Unpublish survey *(surfaced via publish state in list; publish actions are exposed via API service)*
-
-### Question builder
-- List questions for a survey
-- Create / Edit / Delete questions
-- Duplicate questions
-- Client-side validations driven by schema rules
-
-### Preview experience
-- Survey preview rendering for multiple question types:
-  - Multiple choice (single/multi)
-  - Text response
-  - Dropdown
-  - Likert scale
-  - Calendar
-  - Tabular inputs (text/dropdown/checkbox)
-  - Media uploads (image/video/audio/voice) *(renderer components exist; backend support required)*
-
-### Utilities / Ops
-- Import survey from file (`.xlsx`, `.xls`, `.csv`) with optional overwrite
-- Export survey dump as Excel (`.xlsx`)
-- Designation mapping management (CRUD + seed defaults)
-- Access sheet dump + download (admin-only operations are enforced in UI)
-- Admin panel (user management: create/update users)
+| Concern | Library | Version | Notes |
+|---|---|---|---|
+| Framework | `react` / `react-dom` | 18.2 | No TypeScript. JSX only. |
+| Routing | `react-router-dom` | 6 | Lazy-loaded routes + `<Suspense>` fallback |
+| Server state | `@tanstack/react-query` | 5 | `staleTime: 2 min`, retry only on 5xx/408/429, `refetchOnWindowFocus: true` |
+| HTTP | `axios` | 1.6 | Request interceptor attaches Bearer JWT; response interceptor handles 401 |
+| UI base | `bootstrap` | 5.3 | + `App.css` (~59 KB monolith) + `swiftchatRedesign.css` |
+| Date input | `react-datepicker` | 4.24 | |
+| Build | `react-scripts` | 5.0.1 (CRA) | Eject not recommended |
+| Tests | Jest + React Testing Library | (via CRA) | **No tests written yet** |
 
 ---
 
-## Architecture & Data Flow
+## 2. Feature → Limit Map
 
-### API Base URL Strategy
-All API calls are made to:
-- **`/api/...`** (relative), defined in `src/services/api.js`
-
-This enables:
-- **Local development** via CRA `proxy`
-- **Production** via Vercel `rewrites`
-
-### Authentication
-- Login endpoint: `POST /api/auth/login`
-- JWT token is stored in `localStorage` under key: `token`
-- Axios request interceptor automatically adds:
-  - `Authorization: Bearer <token>`
-- Axios response interceptor auto-redirects to `/login` on **401** and clears token.
-
-### Authorization (Role gating)
-- Routes are protected by `ProtectedRoute`
-- `requiredRole="admin"` gates the Admin Panel (`/admin`)
-- Non-admin inactive users are treated as read-only in key screens (e.g., SurveyList).
+| # | Feature | Where | Limit / Caveat |
+|---|---|---|---|
+| 1 | **JWT login** | `Login.jsx`, `AuthContext.jsx` | Token in `localStorage` (XSS-readable). Logout = clear key + redirect. |
+| 2 | **Protected routes** | `ProtectedRoute.jsx` + `StateOnlyRoute` in `App.jsx` | Admin auto-redirected to `/admin`; state users blocked from `/admin`. |
+| 3 | **Survey CRUD** | `SurveyList.jsx`, `SurveyForm.jsx` | Active state users only. Inactive = read-only. |
+| 4 | **Survey duplicate** | `DuplicateSurveyModal.jsx` | Server-side subtree clone. |
+| 5 | **Question CRUD** | `QuestionList.jsx`, `QuestionForm.jsx` | 12 types; field visibility driven by `schemas/questionTypeSchema.js`. |
+| 6 | **Multi-language editor** | `QuestionForm.jsx` | English entered once; other langs in "Translations" section. Auto-translate via `/api/translate`. Bodo = manual only (no ISO). |
+| 7 | **Survey preview** | `components/preview/SurveyPreview.jsx` + 12 renderers | Onboarding mock (User ID → Verify → Language → UDISE). Mandatory checks enforced. Preview answers are **not persisted**. |
+| 8 | **Excel/CSV import (preview)** | `ImportSurvey.jsx` | Two-phase: parse → pick surveys → commit. Errors include cell refs (`[Question Master B5]`). |
+| 9 | **Dumpsheet Validator** | `DumpsheetValidator.jsx` (`/validator`) | Read-only. Errors filtered to `Mode∈{New Data,Correction}`. Downloadable CSV report. |
+| 10 | **Excel export** | `surveyAPI`/`exportAPI` in `api.js` | Blob download (`URL.createObjectURL` + `revokeObjectURL`). |
+| 11 | **Designation hierarchy** | `DesignationMapping.jsx` | Admin-managed list; XLSX export. |
+| 12 | **Access Sheet dump/download** | `AccessSheet.jsx` | Per-state. Downloads latest XLSX. |
+| 13 | **Admin panel** | `AdminPanel.jsx` (`/admin`, admin only) | User + state-config management. |
+| 14 | **Toast notifications** | `Toast.jsx` (`useToast()`) | Auto-dismiss: 3.5 s (success/info/warning), 5 s (error). |
+| 15 | **Inline validation** | `hooks/useValidation.js` + `schemas/validationConstants.js` | Mirrors BE rules; final authority is server. |
+| 16 | **Concurrency lock** | `lockAPI` in `api.js` | UI surfaces `409` with lock-owner info. No real-time updates. |
+| 17 | **Publish / Unpublish UI** | `QuestionList.jsx` | Gated by `REACT_APP_FEATURE_PUBLISH` (Inferred). |
+| 18 | **Custom cursor** | `App.jsx` (`CustomCursor`) | Disabled on touch / `prefers-reduced-motion`. |
+| 19 | **Error boundary** | `ErrorBoundary.jsx` | Wraps the route tree. |
+| 20 | **5-min upload timeout** | `api.js` | Bumped from default 30 s to survive Vercel BE cold starts on large imports. |
 
 ---
 
-## Local Setup
+## 3. File Tree
 
-### Prerequisites
-- Node.js 16+ (18+ recommended)
-- npm 8+ (or compatible)
+```
+Survey-builder-FE/
+├── public/                           # CRA static assets (index.html, favicon, fish.svg used by water animation)
+├── package.json                      # "proxy": "http://localhost:5001"
+├── vercel.json                       # /api/* → BE host; /(.*) → /index.html (SPA fallback)
+└── src/
+    ├── index.jsx                     # React 18 root.render()
+    ├── App.jsx                       # Router + Suspense + QueryClient + AuthProvider + ToastProvider + CustomCursor + ErrorBoundary
+    ├── App.css                       # Bootstrap + all custom styles (~59 KB monolith)
+    ├── swiftchatRedesign.css         # Visual refresh overlay
+    │
+    ├── components/
+    │   ├── preview/                  # Survey preview rendering
+    │   │   ├── SurveyPreview.jsx     # Onboarding (User ID → Verify → Lang → UDISE) + per-question nav
+    │   │   ├── QuestionRenderer.jsx  # Dispatch to type-specific renderer
+    │   │   ├── PreviewNavigation.jsx # Next/Prev + progress
+    │   │   ├── CalendarRenderer.jsx
+    │   │   ├── DropDownRenderer.jsx
+    │   │   ├── LikertScaleRenderer.jsx
+    │   │   ├── MediaUploadRenderer.jsx
+    │   │   ├── MultipleChoiceSingleRenderer.jsx
+    │   │   ├── MultipleChoiceMultiRenderer.jsx
+    │   │   ├── TextResponseRenderer.jsx
+    │   │   ├── TabularTextInputRenderer.jsx
+    │   │   ├── TabularDropDownRenderer.jsx
+    │   │   └── TabularCheckBoxRenderer.jsx
+    │   ├── AccessSheet.jsx           # Per-state XLSX dump + download
+    │   ├── AdminPanel.jsx            # Admin-only: user + state-config CRUD
+    │   ├── DesignationMapping.jsx    # Designation hierarchy CRUD + seed defaults
+    │   ├── DumpsheetValidator.jsx    # /validator — read-only data validator
+    │   ├── DuplicateSurveyModal.jsx  # Survey clone UI (server-side)
+    │   ├── ErrorBoundary.jsx         # Top-level boundary; logs to console
+    │   ├── ImportSurvey.jsx          # /import — XLSX/CSV preview-then-commit
+    │   ├── Login.jsx                 # /login — POST /api/auth/login
+    │   ├── Navigation.jsx            # App-shell nav bar
+    │   ├── ProtectedRoute.jsx        # Token check + role enforcement
+    │   ├── QuestionForm.jsx          # Create/edit question + multi-lang translations + auto-translate
+    │   ├── QuestionList.jsx          # List + export + publish/unpublish + duplicate
+    │   ├── SurveyForm.jsx            # Create/edit survey metadata
+    │   ├── SurveyList.jsx            # State user home; CRUD actions
+    │   ├── Toast.jsx                 # ToastProvider + useToast()
+    │   └── WaterAnimation.jsx        # Decorative animation (fish.svg)
+    │
+    ├── contexts/
+    │   └── AuthContext.jsx           # JWT decode, user object, login/logout helpers
+    │
+    ├── hooks/
+    │   └── useValidation.js          # Client mirror of validation rules
+    │
+    ├── schemas/
+    │   ├── languageMappings.js       # Language ↔ ISO ↔ native script (10 langs)
+    │   ├── questionTypeSchema.js     # Field-visibility flags per Q-type
+    │   └── validationConstants.js    # Regex + constants
+    │
+    └── services/
+        └── api.js                    # Axios instance + 13 grouped API objects (auth/admin/survey/...)
+```
 
-### Install
+---
+
+## 4. Route Map (`src/App.jsx`)
+
+All routes except `/login` require auth (`<ProtectedRoute>`). All non-admin routes use `<StateOnlyRoute>` which **auto-redirects admins to `/admin`**.
+
+| Path | Component | Access |
+|---|---|---|
+| `/login` | `Login` | Public |
+| `/` | `SurveyList` | State (active or inactive read-only) |
+| `/surveys/new` | `SurveyForm` | State + active |
+| `/surveys/:surveyId/edit` | `SurveyForm` | State + active |
+| `/surveys/:surveyId/questions` | `QuestionList` | State |
+| `/surveys/:surveyId/questions/new` | `QuestionForm` | State + active |
+| `/surveys/:surveyId/questions/:questionId/edit` | `QuestionForm` | State + active |
+| `/surveys/:surveyId/preview` | `SurveyPreview` | State |
+| `/import` | `ImportSurvey` | State + active |
+| `/validator` | `DumpsheetValidator` | State |
+| `/designations` | `DesignationMapping` | State (admin can manage; read-only otherwise) |
+| `/access-sheet` | `AccessSheet` | State |
+| `/admin` | `AdminPanel` | **Admin only** |
+
+---
+
+## 5. API Client Map (`src/services/api.js`)
+
+13 grouped exports — single Axios instance with auth interceptors.
+
+| Object | Endpoints covered |
+|---|---|
+| `authAPI` | `POST /auth/login` |
+| `adminAPI` | `GET/POST/PATCH /admin/users` |
+| `stateConfigAPI` | `GET/POST/PATCH/DELETE /admin/state-config[/:state_code]` |
+| `lockAPI` | `POST/DELETE/GET /surveys/:id/lock` |
+| `publishAPI` | `POST /surveys/:id/publish`, `…/unpublish` |
+| `surveyAPI` | Surveys CRUD + `/duplicate` |
+| `questionAPI` | Questions CRUD + `/duplicate` |
+| `exportAPI` | `GET /export/:surveyId` (blob download) |
+| `designationAPI` | CRUD + `/seed-defaults` + `/export` |
+| `accessSheetAPI` | `/dump`, `/latest`, `/latest/download` |
+| `translateAPI` | `POST /translate` |
+| `validationAPI` | `POST /validate-upload`, `GET /validation-schema` |
+
+### Interceptors
+
+- **Request:** attaches `Authorization: Bearer <localStorage.token>` to every call.
+- **Response:** on `401`, clears `localStorage.token` and redirects to `/login`.
+
+### Blob download pattern (`exportAPI`, `accessSheetAPI`, `designationAPI.exportXlsx`)
+
+```js
+const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+const url = URL.createObjectURL(blob);
+const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+a.click();
+URL.revokeObjectURL(url);    // always revoke
+```
+
+---
+
+## 6. Auth & RBAC
+
+- **JWT** issued by `POST /api/auth/login`. Stored under `localStorage.token`.
+- `AuthContext.jsx` decodes the payload → `{ id, username, role, stateCode, isActive }`.
+- `ProtectedRoute` checks for a valid token; missing/expired → `/login`.
+- Admin home is `/admin`; state-user home is `/`. `<StateOnlyRoute>` redirects admins away from state-user routes.
+
+### Role behaviour matrix
+
+| Action | admin | state (active) | state (inactive) |
+|---|---|---|---|
+| `/` survey list | redirected → `/admin` | ✓ | ✓ (read-only) |
+| Create/edit/delete survey | — (server-side too) | ✓ | — |
+| Create/edit/delete question | — | ✓ | — |
+| Preview | — | ✓ | ✓ |
+| Import | — | ✓ | — |
+| Designations CRUD | ✓ | ✓ (when active) | — |
+| Access Sheet | ✓ | ✓ | ✓ (download) |
+| Admin panel `/admin` | ✓ | blocked | blocked |
+
+---
+
+## 7. State Management
+
+| Concern | Mechanism |
+|---|---|
+| User session | `AuthContext` (`useAuth()`) |
+| Toast queue | `ToastContext` inside `Toast.jsx` (`useToast()`) |
+| Server data | `@tanstack/react-query` — `staleTime: 2 min`, retry on 5xx/408/429 |
+| Local form state | `useState` per component |
+| **Not used** | Redux, Zustand, MobX, Recoil |
+
+---
+
+## 8. Validation (Client Mirror)
+
+`hooks/useValidation.js` mirrors backend rules to give inline form errors. Patterns live in `schemas/validationConstants.js`.
+
+- **Survey ID:** `^[A-Za-z0-9_]+$`
+- **Question ID:** `^Q\d+(\.\d+)*$`
+- **Survey name:** ≤ 99 chars
+- **Description:** ≤ 256 chars
+- **Question description:** ≤ 1024 chars
+- **Options:** 2–20 per question, each ≤ 100 chars
+- **Tabular header:** exactly 2 comma-separated tokens
+- **Tabular body:** optional `^[A-Za-z]:.*(\n[A-Za-z]:.*)*$`
+
+> **Server is the final authority.** Client validation only catches obvious issues early.
+
+---
+
+## 9. Question Types (`schemas/questionTypeSchema.js`)
+
+12 types with per-type field visibility:
+
+```
+Multiple Choice Single Select   (MCSS — drives branching via OptionXChildren)
+Multiple Choice Multi Select
+Text Response
+Tabular Text Input
+Tabular Drop Down
+Tabular Check Box
+Likert Scale
+Calendar
+Media Upload
+Drop Down
+Voice Response                  (Inferred: no renderer in preview/)
+```
+
+Visibility flags: `showOptions`, `showTableFields`, `showTextInputType`, `showMediaType`, …
+
+**Translations object** (per question):
+
+```jsonc
+{
+  "questionDescription": "English text",
+  "translations": {
+    "English": { "questionDescription": "...", "options": [{ text, textInEnglish, children }] },
+    "Hindi":   { "questionDescription": "...", "options": [...] }
+  }
+}
+```
+
+English content entered once; other languages either typed manually or auto-translated via `/api/translate`.
+
+---
+
+## 10. Local Setup
+
 ```bash
+cd Survey-builder-FE
 npm install
+npm start                # CRA dev on :3000, proxies /api → :5001
 ```
 
-### Run (Dev)
+Backend must run on `:5001` (or update `"proxy"` in `package.json`).
+
+### Scripts
+
 ```bash
-npm start
+npm start                # dev server
+npm run build            # production build → ./build
+npm test                 # Jest (no tests yet)
+npm run eject            # CRA eject — avoid
 ```
 
-The app will run on:
-- http://localhost:3000
+### Production (Vercel)
 
-### Connect to Backend (Local)
-This project is configured with CRA `proxy`:
-
-- In `package.json`:
-  - `"proxy": "http://localhost:5001"`
-
-So your backend should run locally at:
-- `http://localhost:5001`
-
-> If your backend runs on another port, update the `proxy` value and restart the FE dev server.
-
----
-
-## Production Deployment (Vercel)
-
-This repo includes `vercel.json` with rewrites:
-
-- `GET /api/:path*` → `https://survey-builder-be.onrender.com/api/:path*`
-- `/(.*)` → `/index.html` (SPA fallback)
-
-### Switching the Backend URL
-To point production FE to a different backend, update `vercel.json`:
+[`vercel.json`](./vercel.json):
 
 ```json
 {
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://<YOUR-BACKEND-HOST>/api/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/:path*", "destination": "https://survey-builder-be.onrender.com/api/:path*" },
+    { "source": "/(.*)",       "destination": "/index.html" }
   ]
 }
 ```
 
----
-
-## Folder Structure
-
-```
-client/
-├── public/                       # CRA public assets
-├── src/
-│   ├── components/
-│   │   ├── AdminPanel.jsx        # Admin user management
-│   │   ├── AccessSheet.jsx       # Dump/download access sheet
-│   │   ├── DesignationMapping.jsx# Designation mapping CRUD
-│   │   ├── ImportSurvey.jsx      # File import (xlsx/xls/csv)
-│   │   ├── Login.jsx             # Auth UI
-│   │   ├── Navigation.jsx        # App shell navigation
-│   │   ├── ProtectedRoute.jsx    # Route guard + role gating
-│   │   ├── SurveyList.jsx        # Survey listing + actions
-│   │   ├── SurveyForm.jsx        # Create/edit survey
-│   │   ├── QuestionList.jsx      # Question listing + actions
-│   │   ├── QuestionForm.jsx      # Create/edit question
-│   │   ├── DuplicateSurveyModal.jsx
-│   │   ├── Toast.jsx             # Toast provider/UX
-│   │   ├── TranslationPanel.jsx  # Multi-language inputs
-│   │   └── preview/              # Survey preview renderers
-│   ├── contexts/
-│   │   └── AuthContext.jsx       # JWT decode + user state
-│   ├── hooks/
-│   │   └── useValidation.js      # Client validation utilities
-│   ├── schemas/
-│   │   ├── questionTypeSchema.js # Question types + field rules
-│   │   ├── languageMappings.js   # Language/native script mappings
-│   │   └── validationConstants.js
-│   ├── services/
-│   │   └── api.js                # Axios + API wrappers
-│   ├── App.jsx                   # Routes + layout
-│   ├── App.css
-│   └── index.jsx
-├── package.json
-└── vercel.json
-```
+Change `destination` of `/api/:path*` to point at a different backend.
 
 ---
 
-## Route Map (Frontend)
+## 11. Conventions
 
-Defined in `src/App.jsx`:
-
-- `/login` — Login
-- `/` — Survey list
-- `/surveys/new` — Create survey
-- `/surveys/:surveyId/edit` — Edit survey
-- `/surveys/:surveyId/questions` — Question list
-- `/surveys/:surveyId/questions/new` — Create question
-- `/surveys/:surveyId/questions/:questionId/edit` — Edit question
-- `/surveys/:surveyId/preview` — Preview survey
-- `/import` — Import survey file
-- `/designations` — Designation mapping
-- `/access-sheet` — Access sheet dump/download
-- `/admin` — Admin user management (**admin-only**)
+- **Files:** PascalCase `.jsx` for components, camelCase `.js` for hooks/services/schemas.
+- **Hooks:** functional components only; hooks at top, handlers next, JSX last.
+- **API errors:** `err.response?.data?.message` → toast (`useToast()`); fall back to a generic.
+- **CSS:** prefer Bootstrap utilities; add to `App.css` only when utilities don't suffice. No CSS-in-JS.
+- **Routes:** always wrap new top-level routes in `React.lazy()` + `<Suspense>`.
+- **API additions:** add new methods to the relevant export object in `services/api.js`; create a new export object for a new domain.
+- **No comments by default** — names should self-document.
 
 ---
 
-## API Endpoints Used by Frontend
+## 12. Limits & Known Constraints
 
-From `src/services/api.js` and relevant components:
-
-### Auth
-- `POST /api/auth/login`
-
-### Surveys
-- `GET /api/surveys`
-- `GET /api/surveys/:surveyId`
-- `POST /api/surveys`
-- `PUT /api/surveys/:surveyId`
-- `DELETE /api/surveys/:surveyId`
-- `POST /api/surveys/:surveyId/duplicate`
-
-### Questions
-- `GET /api/surveys/:surveyId/questions`
-- `POST /api/surveys/:surveyId/questions`
-- `PUT /api/surveys/:surveyId/questions/:questionId`
-- `DELETE /api/surveys/:surveyId/questions/:questionId`
-- `POST /api/surveys/:surveyId/questions/:questionId/duplicate`
-
-### Locking (concurrency control)
-- `POST /api/surveys/:surveyId/lock`
-- `DELETE /api/surveys/:surveyId/lock`
-- `GET /api/surveys/:surveyId/lock`
-
-### Publish
-- `POST /api/surveys/:surveyId/publish`
-- `POST /api/surveys/:surveyId/unpublish`
-
-### Export
-- `GET /api/export/:surveyId` → downloads `{surveyId}_dump.xlsx`
-
-### Import
-- `POST /api/import` (multipart)
-- `POST /api/import?overwrite=true` (multipart)
-
-### Designation Mapping
-- `GET /api/designations?stateCode=XX&activeOnly=true`
-- `POST /api/designations`
-- `PATCH /api/designations/:designationId`
-- `POST /api/designations/seed-defaults`
-
-### Access Sheet
-- `POST /api/access-sheet/dump`
-- `GET /api/access-sheet/latest?stateCode=XX`
-- `GET /api/access-sheet/latest/download?stateCode=XX` → downloads `.xlsx`
-
-### Validation
-- `POST /api/validate-upload?schema=<schema>` (multipart)
-- `GET /api/validation-schema`
+- **No tests.** Jest + RTL wired via CRA; nothing written.
+- **JWT in `localStorage`** — XSS-readable. No refresh tokens; manual re-login on 24 h expiry.
+- **Auth `exp` claim** — `AuthContext` checks expiry on decode; tokens without `exp` never expire.
+- **CRA only** — no Vite migration. `npm run build` is slow on large workspaces.
+- **`App.css` is a 59 KB monolith** — hard to split, but tree-shakes via Bootstrap purge.
+- **5-min Axios timeout on uploads** — works around Vercel BE cold starts; can mask hung uploads from users.
+- **Voice Response** — Q-type in the enum but no renderer in `preview/`.
+- **Custom cursor** — adds global listeners; disabled on touch / reduced-motion only.
+- **No CSP** configured in `index.html`.
+- **`proxy` doesn't apply to `npm run build`** — only `npm start`. Prod uses `vercel.json` rewrites.
 
 ---
 
-## Active vs Inactive (Practical Guidance)
+## 13. Common Pitfalls
 
-**Active (wired end-to-end in FE):**
-- Login + protected navigation
-- Survey CRUD + duplicate
-- Question CRUD + duplicate
-- Preview route with multiple renderers
-- Import/export flows (UI + API calls)
-- Admin panel, designation mapping, access sheet screens
-
-**Potentially inactive / backend-dependent:**
-- Publish/unpublish and lock endpoints are implemented in the FE API layer; confirm backend availability.
-- Media upload question types have renderer components; confirm backend storage + submission contract.
+1. **Redirect loop to `/login`** — token expired or invalid `exp` claim. Clear with `localStorage.removeItem('token')`.
+2. **API 404 in dev** — backend not on `:5001`, or `proxy` in `package.json` outdated.
+3. **CORS errors in dev** — only happens if you disable the CRA proxy. Backend's `cors()` is permissive by default.
+4. **Admin sees `/` instead of survey list** — by design (`StateOnlyRoute` redirects admins to `/admin`).
+5. **Lazy route flash** — `<Suspense>` shows the "Loading…" `PageLoader`. Don't block render in route components on top-level effects.
+6. **Blob download leaks memory** — always call `URL.revokeObjectURL(url)` after the anchor click.
 
 ---
 
-## Common Troubleshooting
+## 14. Future Improvements
 
-### 1) FE runs but API calls fail (404/500)
-- Confirm backend is running (local) at the port in `"proxy"` (default `5001`)
-- Confirm backend exposes `/api/...` routes (the FE always calls `/api`)
-- For production, confirm `vercel.json` rewrite points to a live backend host
-
-### 2) Redirect loop to `/login`
-- Token expired or invalid JWT payload
-- Clear storage and login again:
-  - `localStorage.removeItem('token')`
-
-### 3) CORS issues (local backend)
-- CRA proxy usually bypasses CORS. If you disabled proxy, backend must allow `http://localhost:3000`.
+- Move JWT from `localStorage` to `httpOnly` cookie + add refresh-token flow.
+- Add tests (RTL for components, MSW for API mocking).
+- Split `App.css` by route or move to CSS Modules.
+- Replace CRA with Vite for faster builds + HMR.
+- Extract validation rules into a shared package with BE (single source of truth).
+- Add a service-worker / offline cache for surveys + designations.
+- Wire up Sentry or PostHog for client error reporting.
 
 ---
 
-## Scripts
+## 15. Quick Reference
 
 ```bash
-npm start   # dev server
-npm run build
-npm test
-npm run eject
+npm start                # dev (:3000, proxies /api → :5001)
+npm run build            # production bundle → ./build
+
+# Add a new API domain                  → edit src/services/api.js (new export)
+# Add a new question type               → schemas/questionTypeSchema.js + new renderer in components/preview/
+# Add a new route                       → src/App.jsx (React.lazy + <Route>); add to <StateOnlyRoute> or ProtectedRoute as needed
+# Change prod backend                   → vercel.json rewrite destination
+# Reset auth                            → localStorage.removeItem('token')
 ```
-
----
-
-## License
-TBD

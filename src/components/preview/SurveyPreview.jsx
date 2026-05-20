@@ -533,11 +533,11 @@ const SurveyPreview = () => {
         </div>
         <div className="preview-info-cell">
           <span className="preview-info-label">User ID</span>
-          <span className="preview-info-value">{previewUser?.userId || user?.username || '-'}</span>
+          <span className="preview-info-value">{previewUser?.userId || user?.username || user?.email || '-'}</span>
         </div>
         <div className="preview-info-cell">
           <span className="preview-info-label">Employee Name</span>
-          <span className="preview-info-value">{previewUser?.name || user?.name || user?.username || '-'}</span>
+          <span className="preview-info-value">{previewUser?.name || user?.name || user?.username || user?.email || '-'}</span>
         </div>
         {previewUser?.designation && (
           <div className="preview-info-cell">
