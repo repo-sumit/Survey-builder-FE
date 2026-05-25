@@ -11,7 +11,8 @@ const parseLangs = (str) =>
   (str || '').split(',').map(s => s.trim()).filter(Boolean);
 const joinLangs  = (arr) => arr.join(',');
 
-const SHOW_LEGACY_CREATE = (process.env.REACT_APP_LEGACY_LOGIN_VISIBLE || 'true').toLowerCase() !== 'false';
+// LEGACY LOGIN — legacy create form disabled entirely.
+const SHOW_LEGACY_CREATE = false;
 
 const fmtDate = (v) => {
   if (!v) return '—';
@@ -113,7 +114,7 @@ const AdminPanel = () => {
   };
 
   /* ── User handlers ────────────────────────────────────────────── */
-  const handleInvite = async (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault(); setUsersFormError(null);
     const email = inviteForm.email.trim().toLowerCase();
     if (!email) return setUsersFormError('Email is required');
@@ -128,10 +129,13 @@ const AdminPanel = () => {
       });
       setInviteForm({ email: '', name: '', role: 'state', stateCode: '', isActive: true });
       setShowInviteForm(false);
-      toast.success(`Invite sent: ${email}`);
+      toast.success(`User added: ${email}`);
       loadUsers();
     } catch (err) {
-      setUsersFormError(err.response?.data?.error || 'Failed to invite user');
+      // Surface the BE's real error so we know why it failed
+      const apiErr = err.response?.data?.error || err.response?.data?.message;
+      console.error('Add user failed:', err.response?.status, err.response?.data || err.message);
+      setUsersFormError(apiErr || `Failed to add user (${err.response?.status || 'network'})`);
     }
   };
 
@@ -352,7 +356,7 @@ const AdminPanel = () => {
                 className={`btn btn-primary btn-sm btn-cta ${showInviteForm ? 'btn-icon-cancel' : 'btn-icon-create'}`}
                 onClick={() => { setShowInviteForm(v => !v); setShowLegacyCreate(false); }}
               >
-                {showInviteForm ? 'Cancel' : 'Invite User'}
+                {showInviteForm ? 'Cancel' : 'Add User'}
               </button>
               {SHOW_LEGACY_CREATE && (
                 <button
@@ -372,11 +376,11 @@ const AdminPanel = () => {
 
           {showInviteForm && (
             <div className="admin-form-card">
-              <h3>Invite User (Google Sign-In)</h3>
+              <h3>Add User</h3>
               <p className="text-muted" style={{ marginTop: 0 }}>
                 The user will sign in via Google with this exact email. No password is needed.
               </p>
-              <form onSubmit={handleInvite}>
+              <form onSubmit={handleAddUser}>
                 <div className="form-row">
                   <div className="form-group">
                     <label>Email <span className="required">*</span></label>
@@ -424,7 +428,7 @@ const AdminPanel = () => {
                   )}
                 </div>
                 <div className="form-actions">
-                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Send Invite</button>
+                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Add User</button>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"

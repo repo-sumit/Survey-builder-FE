@@ -11,6 +11,7 @@ export function useAuth() {
   return ctx;
 }
 
+/* LEGACY LOGIN — disabled. Kept commented for reference.
 function decodeLegacyJwt(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -20,17 +21,19 @@ function decodeLegacyJwt(token) {
     return null;
   }
 }
+end LEGACY LOGIN */
 
 export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
-  const [legacyToken, setLegacyToken] = useState(() => localStorage.getItem('token'));
+  // LEGACY LOGIN — legacy JWT state removed.
+  // const [legacyToken, setLegacyToken] = useState(() => localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const [authReason, setAuthReason] = useState(null); // NOT_INVITED | INACTIVE | DOMAIN_BLOCKED
   const supabaseSessionRef = useRef(null);
 
   /** Resolve the current identity by calling /api/auth/me.
-   *  Works for both Supabase access tokens and the legacy JWT.
+   *  Only Supabase access tokens are honored.
    *  On 403 we surface the reason for the Login page banner.
    */
   const resolveProfile = useCallback(async () => {
@@ -44,9 +47,8 @@ export function AuthProvider({ children }) {
       if (err?.response?.status === 403 && code) {
         setAuthReason(code);
       }
-      // Hard-clear both auth sources; the response interceptor handles 401 redirects.
-      localStorage.removeItem('token');
-      setLegacyToken(null);
+      // LEGACY LOGIN — localStorage cleanup no longer needed.
+      // localStorage.removeItem('token');
       await signOutSupabase();
       setUser(null);
       return null;
@@ -64,15 +66,14 @@ export function AuthProvider({ children }) {
         supabaseSessionRef.current = data?.session || null;
       }
 
-      // 2. If we have either a Supabase session OR a non-expired legacy token, ask /me.
+      // 2. If we have a Supabase session, ask /me.
       const haveSupabaseSession = !!supabaseSessionRef.current;
+      /* LEGACY LOGIN — local-storage token boot disabled.
       const haveLegacy = !!legacyToken && !!decodeLegacyJwt(legacyToken);
-      if (haveSupabaseSession || haveLegacy) {
+      if (haveSupabaseSession || haveLegacy) { ... }
+      end LEGACY LOGIN */
+      if (haveSupabaseSession) {
         await resolveProfile();
-      } else if (legacyToken) {
-        // Legacy token present but expired/broken — clean it up.
-        localStorage.removeItem('token');
-        setLegacyToken(null);
       }
       if (!cancelled) setLoading(false);
     }
@@ -87,7 +88,7 @@ export function AuthProvider({ children }) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           await resolveProfile();
         } else if (event === 'SIGNED_OUT') {
-          if (!legacyToken) setUser(null);
+          setUser(null);
         }
       });
       sub = data?.subscription;
@@ -97,18 +98,18 @@ export function AuthProvider({ children }) {
       cancelled = true;
       if (sub) sub.unsubscribe();
     };
-    // legacyToken intentionally omitted — boot runs once; legacy login path drives setUser directly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* LEGACY LOGIN — username/password login disabled. Kept for reference.
   const loginLegacy = useCallback(async (username, password) => {
     const data = await authAPI.login(username, password);
     localStorage.setItem('token', data.token);
     setLegacyToken(data.token);
-    // The /me endpoint gives us the unified shape (incl. label).
     const profile = await resolveProfile();
     return profile || data.user;
   }, [resolveProfile]);
+  end LEGACY LOGIN */
 
   const loginWithGoogle = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -119,8 +120,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    localStorage.removeItem('token');
-    setLegacyToken(null);
+    // LEGACY LOGIN — localStorage cleanup no longer needed.
+    // localStorage.removeItem('token');
     await signOutSupabase();
     setUser(null);
     setAuthReason(null);
@@ -134,7 +135,8 @@ export function AuthProvider({ children }) {
     loading,
     authReason,
     clearAuthReason,
-    loginLegacy,
+    // LEGACY LOGIN — loginLegacy removed.
+    // loginLegacy,
     loginWithGoogle,
     logout,
     isSupabaseConfigured
