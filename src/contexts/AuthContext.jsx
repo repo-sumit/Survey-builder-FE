@@ -5,40 +5,77 @@ import { supabase, isSupabaseConfigured, signOutSupabase } from '../services/sup
 
 const AuthContext = createContext(null);
 
+/**
+ * Hard ceiling on how long the auth bootstrap may block app rendering.
+ * After this elapses we settle to a known unauthenticated state and let
+ * ProtectedRoute redirect to /login. This prevents indefinite blank Loading
+ * screens caused by a hung /api/auth/me, slow Supabase JWKS, or a Render
+ * cold start.
+ */
+const BOOT_TIMEOUT_MS = 8000;
+
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
 
-/* LEGACY LOGIN — disabled. Kept commented for reference.
-function decodeLegacyJwt(token) {
+function deadline(ms, label) {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(label || 'AUTH_BOOT_TIMEOUT')), ms)
+  );
+}
+
+/**
+ * Wipe every browser auth artifact we know about. Designed to be safe to call
+ * even when the user has never signed in. We DON'T blindly `localStorage.clear()`
+ * — that would nuke unrelated app preferences. Instead we target:
+ *   - any localStorage key starting with `sb-` (Supabase client persistence)
+ *   - the legacy `token` key (defensive — removed from the codebase but a
+ *     returning user may still have it cached)
+ *   - sessionStorage entirely (no app-level data lives there today)
+ *   - Supabase server-side session via signOut
+ */
+async function purgeBrowserAuthArtifacts() {
+  try { await signOutSupabase(); } catch (e) { /* ignore */ }
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-    return payload;
-  } catch {
-    return null;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key.startsWith('sb-') || key === 'token') {
+        localStorage.removeItem(key);
+      }
+    }
+    sessionStorage.clear();
+  } catch (e) {
+    console.warn('[auth] storage cleanup failed', e);
   }
 }
-end LEGACY LOGIN */
 
 export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState(null);
-  // LEGACY LOGIN — legacy JWT state removed.
-  // const [legacyToken, setLegacyToken] = useState(() => localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
-  const [authReason, setAuthReason] = useState(null); // NOT_INVITED | INACTIVE | DOMAIN_BLOCKED
+  const [authReason, setAuthReason] = useState(null); // NOT_INVITED | INACTIVE | DOMAIN_BLOCKED | BOOT_TIMEOUT
   const supabaseSessionRef = useRef(null);
+  const resolvingRef = useRef(false);     // guard against duplicate /me calls
+  const bootedRef = useRef(false);        // ensure boot only runs once
 
-  /** Resolve the current identity by calling /api/auth/me.
-   *  Only Supabase access tokens are honored.
-   *  On 403 we surface the reason for the Login page banner.
+  /**
+   * Ask the backend "who am I?". Single source of truth for role + state.
+   * On success → set user.
+   * On 403 → record the reason banner and clear auth.
+   * On any other failure (incl. timeout, network) → clear auth quietly.
+   * Always returns; never throws.
    */
   const resolveProfile = useCallback(async () => {
+    if (resolvingRef.current) return null;
+    resolvingRef.current = true;
     try {
-      const profile = await authAPI.me();
+      const profile = await Promise.race([
+        authAPI.me(),
+        deadline(BOOT_TIMEOUT_MS, 'ME_TIMEOUT')
+      ]);
       setUser(profile);
       setAuthReason(null);
       return profile;
@@ -46,41 +83,51 @@ export function AuthProvider({ children }) {
       const code = err?.response?.data?.error;
       if (err?.response?.status === 403 && code) {
         setAuthReason(code);
+      } else if (err?.message === 'ME_TIMEOUT') {
+        setAuthReason('BOOT_TIMEOUT');
       }
-      // LEGACY LOGIN — localStorage cleanup no longer needed.
-      // localStorage.removeItem('token');
-      await signOutSupabase();
+      await purgeBrowserAuthArtifacts();
       setUser(null);
       return null;
+    } finally {
+      resolvingRef.current = false;
     }
   }, []);
 
-  // Boot + subscribe to Supabase auth changes.
+  // Boot once + subscribe to Supabase auth events.
   useEffect(() => {
+    if (bootedRef.current) return;
+    bootedRef.current = true;
+
     let cancelled = false;
 
-    async function boot() {
-      // 1. Hydrate Supabase session (if configured) — supabase reads localStorage itself.
+    async function bootInner() {
       if (isSupabaseConfigured && supabase) {
         const { data } = await supabase.auth.getSession();
         supabaseSessionRef.current = data?.session || null;
       }
-
-      // 2. If we have a Supabase session, ask /me.
-      const haveSupabaseSession = !!supabaseSessionRef.current;
-      /* LEGACY LOGIN — local-storage token boot disabled.
-      const haveLegacy = !!legacyToken && !!decodeLegacyJwt(legacyToken);
-      if (haveSupabaseSession || haveLegacy) { ... }
-      end LEGACY LOGIN */
-      if (haveSupabaseSession) {
+      if (supabaseSessionRef.current) {
         await resolveProfile();
       }
-      if (!cancelled) setLoading(false);
+    }
+
+    async function boot() {
+      try {
+        await Promise.race([bootInner(), deadline(BOOT_TIMEOUT_MS, 'AUTH_BOOT_TIMEOUT')]);
+      } catch (err) {
+        if (err.message === 'AUTH_BOOT_TIMEOUT') {
+          console.error('[auth] boot timeout — falling back to unauthenticated');
+          setAuthReason('BOOT_TIMEOUT');
+        }
+        await purgeBrowserAuthArtifacts();
+        setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     boot();
 
-    // Subscribe to Supabase auth changes (sign-in/sign-out/refresh).
     let sub;
     if (isSupabaseConfigured && supabase) {
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -98,31 +145,24 @@ export function AuthProvider({ children }) {
       cancelled = true;
       if (sub) sub.unsubscribe();
     };
+    // resolveProfile is stable (useCallback w/ empty deps). Run once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /* LEGACY LOGIN — username/password login disabled. Kept for reference.
-  const loginLegacy = useCallback(async (username, password) => {
-    const data = await authAPI.login(username, password);
-    localStorage.setItem('token', data.token);
-    setLegacyToken(data.token);
-    const profile = await resolveProfile();
-    return profile || data.user;
-  }, [resolveProfile]);
-  end LEGACY LOGIN */
 
   const loginWithGoogle = useCallback(async () => {
     if (!isSupabaseConfigured) {
       throw new Error('Google sign-in is not configured.');
     }
-    // Returns immediately; the actual session arrives via onAuthStateChange after redirect.
+    // Returns immediately; session arrives via onAuthStateChange after redirect.
     await authAPI.loginWithGoogle();
   }, []);
 
+  /**
+   * Logout — must clear ALL auth artifacts atomically. After this returns
+   * the user must not be able to recover their session by URL-hopping.
+   */
   const logout = useCallback(async () => {
-    // LEGACY LOGIN — localStorage cleanup no longer needed.
-    // localStorage.removeItem('token');
-    await signOutSupabase();
+    await purgeBrowserAuthArtifacts();
     setUser(null);
     setAuthReason(null);
     queryClient.clear();
@@ -135,11 +175,11 @@ export function AuthProvider({ children }) {
     loading,
     authReason,
     clearAuthReason,
-    // LEGACY LOGIN — loginLegacy removed.
-    // loginLegacy,
     loginWithGoogle,
     logout,
-    isSupabaseConfigured
+    isSupabaseConfigured,
+    /** Imperative re-fetch — useful for tests and after profile-mutating actions. */
+    refreshProfile: resolveProfile
   };
 
   return (

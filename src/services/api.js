@@ -31,11 +31,15 @@ axios.interceptors.response.use(
   response => response,
   async (error) => {
     const requestUrl = typeof error.config?.url === 'string' ? error.config.url : '';
-    const isAuthLoginRequest = requestUrl.includes('/auth/login');
+    // /auth/me is the AuthContext bootstrap probe. AuthContext owns the cleanup
+    // and redirect for it (so it can timeout, set an `authReason` banner, etc.).
+    // /auth/login is no longer used (returns 410) but kept here as a safe-list.
+    const isAuthBootstrapRequest =
+      requestUrl.includes('/auth/me') || requestUrl.includes('/auth/login');
 
-    if (error.response?.status === 401 && !isAuthLoginRequest) {
-      // LEGACY LOGIN — localStorage cleanup no longer needed.
-      // localStorage.removeItem('token');
+    if (error.response?.status === 401 && !isAuthBootstrapRequest) {
+      // Token was valid on initial bootstrap but expired/rotated mid-session.
+      // Clear Supabase and force a clean sign-in flow.
       try { await signOutSupabase(); } catch { /* ignore */ }
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';

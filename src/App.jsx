@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import PublicOnlyRoute from './components/PublicOnlyRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import Login from './components/Login';
 import Navigation from './components/Navigation';
@@ -145,8 +146,15 @@ function App() {
         <ToastProvider>
           <CustomCursor />
           <Routes>
-            {/* Public route — login */}
-            <Route path="/login" element={<Login />} />
+            {/* Public-only route — authenticated users are redirected away. */}
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <Login />
+                </PublicOnlyRoute>
+              }
+            />
 
             {/* All other routes are protected */}
             <Route
