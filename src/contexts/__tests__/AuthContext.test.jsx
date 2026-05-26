@@ -30,6 +30,7 @@ jest.mock('../../services/supabaseClient', () => {
       }
     },
     signOutSupabase: jest.fn().mockResolvedValue(undefined),
+    hasPersistedSupabaseSession: jest.fn(() => false),
     __listeners: listeners
   };
 });
@@ -99,26 +100,78 @@ describe('AuthContext bootstrap', () => {
     expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
   });
 
-  test('boot never hangs even if /me never resolves (timeout fallback)', async () => {
+  test('boot never hangs even if /me never resolves (timeout fallback after retry)', async () => {
     jest.useFakeTimers();
     supabaseMod.supabase.auth.getSession.mockResolvedValue({
       data: { session: { access_token: 'tok' } }
     });
-    // Hanging promise — would block forever without the BOOT_TIMEOUT_MS race.
+    // Both attempts hang — the retry-once path eventually settles via deadline.
     authAPI.me.mockReturnValue(new Promise(() => {}));
     renderApp();
 
     expect(screen.getByTestId('loading').textContent).toBe('true');
 
-    await act(async () => {
-      jest.advanceTimersByTime(10_000); // > BOOT_TIMEOUT_MS (8s)
-    });
+    // Trigger the first deadline (6s), let microtasks flush so the catch
+    // block schedules the retry attempt, then trigger the second deadline (12s).
+    await act(async () => { jest.advanceTimersByTime(7_000); });
+    await act(async () => { jest.advanceTimersByTime(13_000); });
     jest.useRealTimers();
 
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
     expect(screen.getByTestId('user').textContent).toBe('null');
     expect(screen.getByTestId('reason').textContent).toBe('BOOT_TIMEOUT');
     expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+    // Two attempts made (first slow → retry).
+    expect(authAPI.me).toHaveBeenCalledTimes(2);
+  });
+
+  test('cold-backend warmup: first /me times out, second resolves — user is admin', async () => {
+    // Use real timers so chained microtasks settle naturally. The first call
+    // is deliberately delayed past ME_TIMEOUT_FIRST_MS (6s) via a 7s setTimeout;
+    // the retry then resolves immediately. Slow but reliable.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    let callCount = 0;
+    authAPI.me.mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Promise((resolve) => setTimeout(
+          () => resolve({ role: 'state', email: 'should-be-ignored@b.com' }),
+          7_000
+        ));
+      }
+      return Promise.resolve({ role: 'admin', email: 'a@b.com' });
+    });
+    renderApp();
+    expect(screen.getByTestId('loading').textContent).toBe('true');
+
+    await waitFor(
+      () => expect(screen.getByTestId('user').textContent).toBe('admin'),
+      { timeout: 15_000 }
+    );
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(authAPI.me).toHaveBeenCalledTimes(2);
+  }, 20_000);
+
+  test('hasPersistedSession flag is exposed from the synchronous storage hint', async () => {
+    supabaseMod.hasPersistedSupabaseSession.mockReturnValueOnce(true);
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    let captured = null;
+    const HintProbe = () => {
+      captured = useAuth();
+      return null;
+    };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <HintProbe />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(captured && captured.loading).toBe(false));
+    expect(captured.hasPersistedSession).toBe(true);
   });
 });
 

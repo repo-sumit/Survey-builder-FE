@@ -7,8 +7,10 @@ import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicOnlyRoute from './components/PublicOnlyRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import AppLoader from './components/AppLoader';
 import Login from './components/Login';
 import Navigation from './components/Navigation';
+import { authAPI } from './services/api';
 import './App.css';
 import './swiftchatRedesign.css';
 
@@ -40,12 +42,11 @@ const DesignationMapping = lazy(() => import('./components/DesignationMapping'))
 const AccessSheet = lazy(() => import('./components/AccessSheet'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 
-/* Minimal loading fallback */
-const PageLoader = () => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-3)' }}>
-    Loading…
-  </div>
-);
+/* Suspense fallback for lazy route chunks — uses the branded loader so the
+   experience is consistent with the auth bootstrap loader. The lazy chunk
+   normally finishes in <300ms; the loader's timeout-aware copy covers the
+   slow-network case. */
+const PageLoader = () => <AppLoader title="Loading…" showLogo={false} testId="page-loader" />;
 
 /**
  * StateOnlyRoute — redirects admin users to /admin.
@@ -137,6 +138,10 @@ function App() {
     document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.setAttribute('data-bs-theme', 'light');
     localStorage.setItem('theme', 'light');
+    // Pre-warm the (possibly cold) Render backend so that the first authed
+    // request — typically /api/auth/me from AuthContext — does not pay the
+    // full cold-start tax. Fire-and-forget; failure is fine.
+    authAPI.warmup().catch(() => {});
   }, []);
 
   return (
@@ -189,6 +194,11 @@ function App() {
                             </ProtectedRoute>
                           }
                         />
+
+                        {/* Unknown protected paths — deterministic fallback.
+                            Admins land on /admin, state users on /. Avoids the
+                            "blank page on typo'd URL" failure mode. */}
+                        <Route path="*" element={<StateOnlyRoute><Navigate to="/" replace /></StateOnlyRoute>} />
                       </Routes>
                       </Suspense>
                       </ErrorBoundary>

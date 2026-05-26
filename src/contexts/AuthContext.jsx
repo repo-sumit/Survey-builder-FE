@@ -1,18 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { authAPI } from '../services/api';
-import { supabase, isSupabaseConfigured, signOutSupabase } from '../services/supabaseClient';
+import {
+  supabase,
+  isSupabaseConfigured,
+  signOutSupabase,
+  hasPersistedSupabaseSession
+} from '../services/supabaseClient';
 
 const AuthContext = createContext(null);
 
 /**
- * Hard ceiling on how long the auth bootstrap may block app rendering.
- * After this elapses we settle to a known unauthenticated state and let
- * ProtectedRoute redirect to /login. This prevents indefinite blank Loading
- * screens caused by a hung /api/auth/me, slow Supabase JWKS, or a Render
- * cold start.
+ * Boot timing — staged so we never feel stuck and never give up too early
+ * on a cold Render backend:
+ *   - First `/me` attempt races against ME_TIMEOUT_FIRST_MS.
+ *   - On timeout we DO NOT purge — we retry once with ME_TIMEOUT_SECOND_MS,
+ *     since the most common cause is a cold backend (10–15s wake-up).
+ *   - Total worst-case bootstrap is bounded by BOOT_TIMEOUT_MS.
+ *
+ * These values are intentionally a bit higher than the previous single 8s
+ * cap. The branded loader surfaces a "still working" message after 4s and a
+ * "reload" affordance after 12s, so a longer cap doesn't feel worse — it just
+ * avoids spurious BOOT_TIMEOUT/logout when the backend simply needs to wake.
  */
-const BOOT_TIMEOUT_MS = 8000;
+const ME_TIMEOUT_FIRST_MS = 6000;
+const ME_TIMEOUT_SECOND_MS = 12000;
+const BOOT_TIMEOUT_MS = 20000;
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -57,6 +70,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authReason, setAuthReason] = useState(null); // NOT_INVITED | INACTIVE | DOMAIN_BLOCKED | BOOT_TIMEOUT
+  // Synchronous best-effort hint computed once at mount — used by route guards
+  // to choose loader copy ("Restoring your session…" vs plain "Loading…"). NEVER
+  // used as proof of identity; the backend is still the authority on every API.
+  const [hasPersistedSession] = useState(() => hasPersistedSupabaseSession());
   const supabaseSessionRef = useRef(null);
   const resolvingRef = useRef(false);     // guard against duplicate /me calls
   const bootedRef = useRef(false);        // ensure boot only runs once
@@ -64,18 +81,37 @@ export function AuthProvider({ children }) {
   /**
    * Ask the backend "who am I?". Single source of truth for role + state.
    * On success → set user.
-   * On 403 → record the reason banner and clear auth.
-   * On any other failure (incl. timeout, network) → clear auth quietly.
+   * On 403 with a reason code → record the banner reason and clear auth.
+   * On a first-attempt network timeout → retry once with a longer deadline
+   *   (handles Render cold-start where a single /me can take 10–15s). We do
+   *   NOT purge after the first timeout because purging would needlessly log
+   *   the user out for a transient backend warm-up.
+   * On any other failure (401, expired token, 5xx, second timeout) → clear
+   *   auth quietly.
    * Always returns; never throws.
    */
   const resolveProfile = useCallback(async () => {
     if (resolvingRef.current) return null;
     resolvingRef.current = true;
     try {
-      const profile = await Promise.race([
-        authAPI.me(),
-        deadline(BOOT_TIMEOUT_MS, 'ME_TIMEOUT')
-      ]);
+      let profile;
+      try {
+        profile = await Promise.race([
+          authAPI.me(),
+          deadline(ME_TIMEOUT_FIRST_MS, 'ME_TIMEOUT')
+        ]);
+      } catch (firstErr) {
+        // Only retry on our own deadline; for a real HTTP error, fall through.
+        if (firstErr?.message !== 'ME_TIMEOUT') throw firstErr;
+        if (process.env.NODE_ENV !== 'test') {
+          // eslint-disable-next-line no-console
+          console.warn('[auth] /me slow — retrying once before giving up');
+        }
+        profile = await Promise.race([
+          authAPI.me(),
+          deadline(ME_TIMEOUT_SECOND_MS, 'ME_TIMEOUT')
+        ]);
+      }
       setUser(profile);
       setAuthReason(null);
       return profile;
@@ -174,6 +210,11 @@ export function AuthProvider({ children }) {
     user,
     loading,
     authReason,
+    /**
+     * Best-effort hint: did localStorage contain a Supabase session at mount?
+     * Used by route guards to pick loader copy. NOT authorization.
+     */
+    hasPersistedSession,
     clearAuthReason,
     loginWithGoogle,
     logout,

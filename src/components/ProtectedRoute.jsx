@@ -1,14 +1,16 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import AppLoader from './AppLoader';
 
 /**
  * Auth-gated route guard.
  *
  * Contract:
- *   - While AuthContext is bootstrapping, render a small placeholder. The
- *     bootstrap has a hard timeout (see AuthContext.BOOT_TIMEOUT_MS), so this
- *     state is always short-lived; it cannot hang the app indefinitely.
+ *   - While AuthContext is bootstrapping, render the branded AppLoader. The
+ *     bootstrap is bounded by AuthContext.BOOT_TIMEOUT_MS and retries /me once
+ *     on cold-backend timeout, so this state is short-lived and never blanks
+ *     the page.
  *   - If no user after bootstrap → /login.
  *   - If a `requiredRole` is specified and the user has a different role →
  *     redirect to that role's home (admin→/admin, anyone else→/).
@@ -18,17 +20,14 @@ import { useAuth } from '../contexts/AuthContext';
  * middleware/auth.js → requireAdmin / requireWriteAccess.
  */
 const ProtectedRoute = ({ children, requiredRole }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, hasPersistedSession } = useAuth();
 
   if (loading) {
     return (
-      <div
-        className="loading"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-3, #888)' }}
-        aria-busy="true"
-      >
-        Loading…
-      </div>
+      <AppLoader
+        title={hasPersistedSession ? 'Restoring your session…' : 'Loading…'}
+        testId="protected-route-loader"
+      />
     );
   }
 

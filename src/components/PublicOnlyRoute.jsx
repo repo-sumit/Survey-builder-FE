@@ -1,29 +1,37 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import AppLoader from './AppLoader';
 
 /**
  * Wrap routes that should ONLY be visible to unauthenticated users (e.g. /login).
- * If the auth bootstrap is still running, we render a small placeholder rather than
- * the login form — this prevents the page from flashing the login UI on hard refresh
- * for an already-authenticated user.
  *
- * Authenticated users are redirected to their role's home:
- *   - admin → /admin
- *   - everyone else → /
+ * Behavior:
+ *   - While auth is bootstrapping AND we synchronously detected a persisted
+ *     Supabase session in localStorage, render a "Restoring your session…"
+ *     loader. This is the fix for the visual-logout flash that used to happen
+ *     when an authenticated admin manually typed /login into the URL bar:
+ *     instead of seeing a stripped-down "Loading…" with no app shell (which
+ *     looked like a logout) they see a clearly-branded session-restore screen,
+ *     and then get redirected to /admin.
+ *   - While bootstrapping with NO persisted session, render the same loader
+ *     with a neutral "Loading…" message — bootstrap is short in that case.
+ *   - Once bootstrap settles:
+ *       - If a user is present, redirect to their role's home (admin→/admin,
+ *         else /). NEVER render the login form for an authed user, even for a
+ *         tick — that's the source of the perceived-logout bug.
+ *       - Otherwise render the children (the login form).
  */
 const PublicOnlyRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, hasPersistedSession } = useAuth();
 
   if (loading) {
     return (
-      <div
-        className="loading"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-3, #888)' }}
-        aria-busy="true"
-      >
-        Loading…
-      </div>
+      <AppLoader
+        title={hasPersistedSession ? 'Restoring your session…' : 'Loading…'}
+        subtitle={hasPersistedSession ? "You're already signed in — taking you to your workspace." : undefined}
+        testId="public-only-route-loader"
+      />
     );
   }
 

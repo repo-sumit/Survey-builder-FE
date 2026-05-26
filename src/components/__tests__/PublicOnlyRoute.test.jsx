@@ -32,9 +32,17 @@ describe('PublicOnlyRoute (/login)', () => {
   beforeEach(() => useAuth.mockReset());
 
   test('renders Loading placeholder while AuthContext is bootstrapping', () => {
-    useAuth.mockReturnValue({ user: null, loading: true });
+    useAuth.mockReturnValue({ user: null, loading: true, hasPersistedSession: false });
     renderAt('/login');
     expect(screen.getByText(/Loading/i)).toBeInTheDocument();
+  });
+
+  test('shows "Restoring your session…" copy when a persisted session is detected', () => {
+    useAuth.mockReturnValue({ user: null, loading: true, hasPersistedSession: true });
+    renderAt('/login');
+    // This is the fix for the perceived-logout flash: the bootstrap UI must
+    // tell the user "we still know you" — never "we don't know you yet".
+    expect(screen.getByText(/Restoring your session/i)).toBeInTheDocument();
   });
 
   test('unauthenticated user sees the login form', () => {
