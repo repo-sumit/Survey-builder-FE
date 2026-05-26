@@ -395,7 +395,7 @@ const AdminPanel = () => {
                   onClick={openAddState}
                   data-testid="state-add"
                 >
-                  <Icon name="plus" size={14} /> Add State
+                  <Icon name="plus" /> Add State
                 </button>
               </div>
             </header>
@@ -593,7 +593,7 @@ const AdminPanel = () => {
                   onClick={() => (showInviteForm ? closeInviteForm() : openInviteForm())}
                   data-testid="user-add"
                 >
-                  {showInviteForm ? 'Cancel' : (<><Icon name="plus" size={14} /> Add User</>)}
+                  {showInviteForm ? 'Cancel' : (<><Icon name="plus" /> Add User</>)}
                 </button>
                 {SHOW_LEGACY_CREATE && (
                   <button
