@@ -12,7 +12,9 @@ import Login from './components/Login';
 import AccessDenied from './components/AccessDenied';
 import Sidebar from './components/ui/Sidebar';
 import TopNav from './components/ui/TopNav';
-import TweaksPanel from './components/ui/TweaksPanel';
+// Tweaks feature disabled — TweaksPanel import intentionally commented out.
+// Re-enable by uncommenting this import AND the panel render below in AppShell.
+// import TweaksPanel from './components/ui/TweaksPanel';
 import CommandPalette from './components/ui/CommandPalette';
 import useTweaks from './hooks/useTweaks';
 import { authAPI } from './services/api';
@@ -150,9 +152,15 @@ const CustomCursor = () => {
  * is selected, and so ⌘K works app-wide.
  */
 function AppShell({ children }) {
-  const [tweaks, setTweak, resetTweaks] = useTweaks();
+  // useTweaks is still invoked because it applies persisted theme / density /
+  // accent / font / nav choices from localStorage on mount. The interactive
+  // Tweaks panel is disabled (see App.jsx import + render below), so the
+  // setter + reset slots from the tuple are not destructured while the
+  // feature is off.
+  const [tweaks /* , setTweak, resetTweaks */] = useTweaks();
   const [cmdOpen, setCmdOpen] = useState(false);
-  const [tweaksOpen, setTweaksOpen] = useState(false);
+  // Tweaks feature disabled — panel-open state intentionally commented out.
+  // const [tweaksOpen, setTweaksOpen] = useState(false);
 
   // Global ⌘K / Ctrl+K toggle for the command palette. Intentionally
   // ignored when an editable input/textarea is focused so the user can
@@ -180,22 +188,26 @@ function AppShell({ children }) {
       className={isTop ? 'fmb-app-shell' : 'app fmb-app-shell'}
       data-nav={isTop ? 'top' : 'side'}
     >
+      {/* Tweaks feature disabled — onTweaksOpen prop intentionally omitted so
+          the sliders icon does not render in Sidebar/TopNav. Re-enable by
+          uncommenting the TweaksPanel import + render below and passing
+          `onTweaksOpen={() => setTweaksOpen(true)}` through here. */}
       {isTop
-        ? <TopNav  onSearchOpen={() => setCmdOpen(true)} onTweaksOpen={() => setTweaksOpen(true)} />
-        : <Sidebar onSearchOpen={() => setCmdOpen(true)} onTweaksOpen={() => setTweaksOpen(true)} />}
+        ? <TopNav  onSearchOpen={() => setCmdOpen(true)} />
+        : <Sidebar onSearchOpen={() => setCmdOpen(true)} />}
 
       <main className="main-content fmb-main-pane">
         {children}
       </main>
 
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
-      <TweaksPanel
+      {/* <TweaksPanel
         open={tweaksOpen}
         onClose={() => setTweaksOpen(false)}
         values={tweaks}
         setTweak={setTweak}
         onReset={resetTweaks}
-      />
+      /> */}
     </div>
   );
 }

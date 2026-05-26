@@ -92,11 +92,14 @@ const TopNav = ({ onSearchOpen, onTweaksOpen }) => {
       )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        {onTweaksOpen && (
+        {/* Tweaks feature disabled — button intentionally commented out.
+            Re-enable by uncommenting this block AND the TweaksPanel render
+            in App.jsx. */}
+        {/* {onTweaksOpen && (
           <button type="button" className="fmb-icon-btn" aria-label="Open tweaks" onClick={onTweaksOpen}>
             <Icon name="sliders" />
           </button>
-        )}
+        )} */}
         <button type="button" className="fmb-icon-btn" aria-label="Sign out" onClick={logout}>
           <Icon name="logout" />
         </button>

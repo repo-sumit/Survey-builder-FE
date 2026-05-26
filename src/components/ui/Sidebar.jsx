@@ -139,7 +139,11 @@ const Sidebar = ({ onSearchOpen, onTweaksOpen }) => {
           <div className="fmb-user-name">{displayName}</div>
           <div className="fmb-user-role">{roleLabel}</div>
         </div>
-        {onTweaksOpen && (
+        {/* Tweaks feature disabled — button intentionally commented out.
+            Re-enable by uncommenting this block AND the TweaksPanel render
+            in App.jsx. `onTweaksOpen` prop is still accepted on this
+            component for backward compatibility with the tests. */}
+        {/* {onTweaksOpen && (
           <button
             type="button"
             className="fmb-icon-btn"
@@ -149,7 +153,7 @@ const Sidebar = ({ onSearchOpen, onTweaksOpen }) => {
           >
             <Icon name="sliders" />
           </button>
-        )}
+        )} */}
         <button
           type="button"
           className="fmb-icon-btn"
