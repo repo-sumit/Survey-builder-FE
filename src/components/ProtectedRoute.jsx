@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AppLoader from './AppLoader';
+import { ACCESS_DENIED_REASONS } from './AccessDenied';
 
 /**
  * Auth-gated route guard.
@@ -20,7 +21,7 @@ import AppLoader from './AppLoader';
  * middleware/auth.js → requireAdmin / requireWriteAccess.
  */
 const ProtectedRoute = ({ children, requiredRole }) => {
-  const { user, loading, hasPersistedSession } = useAuth();
+  const { user, loading, hasPersistedSession, authReason } = useAuth();
 
   if (loading) {
     return (
@@ -32,6 +33,12 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   }
 
   if (!user) {
+    // Backend rejected this signed-in user (NOT_INVITED / INACTIVE /
+    // DOMAIN_BLOCKED). Show the branded access-denied screen instead of
+    // tossing them at /login where the failure shows as a banner only.
+    if (ACCESS_DENIED_REASONS.includes(authReason)) {
+      return <Navigate to="/access-denied" replace />;
+    }
     return <Navigate to="/login" replace />;
   }
 

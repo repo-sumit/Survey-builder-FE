@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 const INPUT_PATTERNS = {
-  Numeric: { pattern: /[^0-9.\-]/g, inputMode: 'decimal', placeholder: 'Enter a number' },
+  Numeric: { pattern: /[^0-9.-]/g, inputMode: 'decimal', placeholder: 'Enter a number' },
   Alphabets: { pattern: /[^a-zA-Z\s]/g, inputMode: 'text', placeholder: 'Enter alphabets only' },
   Alphanumeric: { pattern: /[^a-zA-Z0-9\s]/g, inputMode: 'text', placeholder: 'Enter text (letters and numbers)' },
   None: { pattern: null, inputMode: 'text', placeholder: 'Enter text' }
@@ -48,6 +48,10 @@ const TabularTextInputRenderer = ({ question, language, onAnswer }) => {
   useEffect(() => {
     setResponses(tableQuestions.map(() => ''));
     setErrors(tableQuestions.map(() => ''));
+    // `tableQuestions` is derived from `tableQuestionValue` on every
+    // render — listing it in deps would loop. The string is the
+    // canonical source.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question.questionId, tableQuestionValue]);
 
   const handleChange = (index, raw) => {

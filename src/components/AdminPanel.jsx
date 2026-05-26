@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { adminAPI, stateConfigAPI } from '../services/api';
 import { useToast } from './Toast';
+import PageHeader from './ui/PageHeader';
+import Icon from './ui/Icon';
 
 /* ── helpers ──────────────────────────────────────────────────── */
 const LANG_OPTIONS = [
@@ -53,7 +55,8 @@ const AdminPanel = () => {
     if (!TABS.includes(tab) || tab === activeTab) return;
     const params = new URLSearchParams(location.search);
     params.set('tab', tab);
-    navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: false });
+    // Use replace to avoid stacking history entries on every tab click.
+    navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
   }, [activeTab, location.pathname, location.search, navigate]);
 
   /* ── State Config ─────────────────────────────────────────────── */
@@ -293,580 +296,749 @@ const AdminPanel = () => {
   };
 
   const authSourceBadge = (u) => {
-    if (u.email && u.username) return <span className="badge">Both</span>;
-    if (u.email)               return <span className="badge badge-state">Google</span>;
-    if (u.username)            return <span className="badge">Legacy</span>;
-    return <span className="text-muted">—</span>;
+    if (u.email && u.username) return <span className="fmb-ap-badge">Both</span>;
+    if (u.email)               return <span className="fmb-ap-badge role-state">Google</span>;
+    if (u.username)            return <span className="fmb-ap-badge">Legacy</span>;
+    return <span style={{ color: 'var(--text-3, #6b6b73)' }}>—</span>;
   };
 
+  /* ── Derived metrics ─────────────────────────────────────────── */
+  const userMetrics = useMemo(() => {
+    const total = users.length;
+    const active = users.filter(u => u.isActive).length;
+    const admins = users.filter(u => u.role === 'admin').length;
+    const stateUsers = users.filter(u => u.role === 'state').length;
+    return { total, active, admins, stateUsers };
+  }, [users]);
+
+  const stateMetrics = useMemo(() => {
+    const total = states.length;
+    const langSet = new Set();
+    states.forEach(s => parseLangs(s.available_languages).forEach(l => langSet.add(l)));
+    return { total, languages: langSet.size };
+  }, [states]);
+
   return (
-    <div className="admin-panel">
+    <div className="fmb-ap-page" data-testid="admin-page">
+      <PageHeader
+        eyebrow="ADMIN"
+        title="Admin Panel"
+        sub="Manage states, languages, and users for the FMB Survey Builder."
+      />
 
-      {/* ── Header ── */}
-      <div className="list-header">
-        <h2>Admin Panel</h2>
-      </div>
-
-      {/* ── Tabs ── */}
-      <div className="admin-tabs" role="tablist">
+      {/* Tabs */}
+      <div className="fmb-ap-tablist" role="tablist" aria-label="Admin sections">
         <button
           role="tab"
+          type="button"
           aria-selected={activeTab === 'states'}
-          className={`admin-tab${activeTab === 'states' ? ' active' : ''}`}
+          aria-controls="admin-states-panel"
+          id="admin-states-tab"
+          className="fmb-ap-tab"
           onClick={() => switchTab('states')}
+          tabIndex={activeTab === 'states' ? 0 : -1}
         >
           State Configuration
+          {stateMetrics.total > 0 && <span className="fmb-ap-tab-count">{stateMetrics.total}</span>}
         </button>
         <button
           role="tab"
+          type="button"
           aria-selected={activeTab === 'users'}
-          className={`admin-tab${activeTab === 'users' ? ' active' : ''}`}
+          aria-controls="admin-users-panel"
+          id="admin-users-tab"
+          className="fmb-ap-tab"
           onClick={() => switchTab('users')}
+          tabIndex={activeTab === 'users' ? 0 : -1}
         >
           User Management
+          {userMetrics.total > 0 && <span className="fmb-ap-tab-count">{userMetrics.total}</span>}
         </button>
       </div>
 
       {/* ══════════ STATE CONFIG TAB ══════════ */}
       {activeTab === 'states' && (
-        <div>
-          <div className="list-header" style={{ marginBottom: '1rem' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-1)' }}>
-              State / U.T. Configuration
-            </h3>
-            <button className="btn btn-primary btn-sm btn-cta btn-icon-add" onClick={openAddState}>Add State</button>
-          </div>
-
-          {statesError && <div className="error-message">{statesError}</div>}
-
-          {showStateForm && (
-            <div className="admin-form-card">
-              <h3>{editingState ? 'Edit State' : 'Add State'}</h3>
-              {stateFormError && <div className="error-message">{stateFormError}</div>}
-              <form onSubmit={handleSaveState}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>State Code <span className="required">*</span></label>
-                    <input
-                      type="text"
-                      value={stateForm.state_code}
-                      onChange={e => setStateForm(p => ({ ...p, state_code: e.target.value }))}
-                      placeholder="e.g., HP, MH"
-                      maxLength={10}
-                      disabled={!!editingState}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>State / U.T. Name <span className="required">*</span></label>
-                    <input
-                      type="text"
-                      value={stateForm.state_name}
-                      onChange={e => setStateForm(p => ({ ...p, state_name: e.target.value }))}
-                      placeholder="e.g., Himachal Pradesh"
-                    />
-                  </div>
+        <div
+          className="fmb-ap-panel"
+          role="tabpanel"
+          id="admin-states-panel"
+          aria-labelledby="admin-states-tab"
+          data-testid="admin-states-panel"
+        >
+          {/* Summary metrics (only when data exists) */}
+          {!statesLoading && states.length > 0 && (
+            <section className="fmb-ap-section" aria-label="State configuration summary">
+              <div className="fmb-ap-metrics">
+                <div className="fmb-ap-metric brand">
+                  <span className="fmb-ap-metric-label">States configured</span>
+                  <span className="fmb-ap-metric-value">{stateMetrics.total}</span>
                 </div>
-                <div className="form-group">
-                  <label>Available Languages <span className="required">*</span></label>
-                  <div className="lang-checkbox-grid">
-                    {LANG_OPTIONS.map(lang => (
-                      <label key={lang} className="lang-checkbox-item">
-                        <input
-                          type="checkbox"
-                          checked={stateForm.available_languages.includes(lang)}
-                          onChange={() => toggleLang(lang)}
-                        />
-                        {lang}
+                <div className="fmb-ap-metric accent">
+                  <span className="fmb-ap-metric-label">Distinct languages</span>
+                  <span className="fmb-ap-metric-value">{stateMetrics.languages}</span>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Section: list + add button */}
+          <section className="fmb-ap-section" aria-labelledby="admin-states-h">
+            <header className="fmb-ap-section-head with-actions">
+              <div>
+                <h3 id="admin-states-h" className="fmb-ap-section-title">State / U.T. Configuration</h3>
+                <p className="fmb-ap-section-sub">Each row defines a state's display name and the languages survey content can be authored in.</p>
+              </div>
+              <div className="fmb-ap-toolbar">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={openAddState}
+                  data-testid="state-add"
+                >
+                  <Icon name="plus" size={14} /> Add State
+                </button>
+              </div>
+            </header>
+
+            {statesError && (
+              <div className="fmb-ap-error-banner" role="alert" data-testid="states-error">
+                <span className="fmb-ap-error-banner-msg">{statesError}</span>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={loadStates}>Retry</button>
+              </div>
+            )}
+
+            {showStateForm && (
+              <div className="fmb-ap-section" style={{ background: 'var(--surface-2)' }} data-testid="state-form">
+                <header className="fmb-ap-section-head">
+                  <h3 className="fmb-ap-section-title">{editingState ? 'Edit state' : 'Add state'}</h3>
+                  <p className="fmb-ap-section-sub">State code is permanent once created. Languages can be edited at any time.</p>
+                </header>
+                {stateFormError && (
+                  <div className="fmb-ap-error-banner" role="alert" data-testid="state-form-error">
+                    <span className="fmb-ap-error-banner-msg">{stateFormError}</span>
+                  </div>
+                )}
+                <form onSubmit={handleSaveState} noValidate>
+                  <div className="fmb-ap-form-grid">
+                    <div className="fmb-ap-field">
+                      <label htmlFor="state-code" className="fmb-ap-field-label">
+                        State Code <span className="fmb-ap-required">*</span>
                       </label>
-                    ))}
-                  </div>
-                  {stateForm.available_languages.length > 0 && (
-                    <div className="lang-selected">
-                      Selected: {stateForm.available_languages.join(', ')}
+                      <input
+                        id="state-code"
+                        type="text"
+                        value={stateForm.state_code}
+                        onChange={e => setStateForm(p => ({ ...p, state_code: e.target.value }))}
+                        placeholder="e.g., HP, MH"
+                        maxLength={10}
+                        disabled={!!editingState}
+                        className="fmb-ap-field-input"
+                      />
                     </div>
-                  )}
-                </div>
-                <div className="form-actions">
-                  <button type="submit" className={`btn btn-primary btn-sm btn-cta ${editingState ? 'btn-icon-update' : 'btn-icon-create'}`} disabled={savingState}>
-                    {savingState ? 'Saving…' : (editingState ? 'Update' : 'Create')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
-                    onClick={() => setShowStateForm(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
+                    <div className="fmb-ap-field">
+                      <label htmlFor="state-name" className="fmb-ap-field-label">
+                        State / U.T. Name <span className="fmb-ap-required">*</span>
+                      </label>
+                      <input
+                        id="state-name"
+                        type="text"
+                        value={stateForm.state_name}
+                        onChange={e => setStateForm(p => ({ ...p, state_name: e.target.value }))}
+                        placeholder="e.g., Himachal Pradesh"
+                        className="fmb-ap-field-input"
+                      />
+                    </div>
+                  </div>
 
-          {statesLoading ? (
-            <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '3rem' }}>Loading…</div>
-          ) : states.length === 0 ? (
-            <div className="empty-state">
-              <p>No states configured yet. Click <strong>+ Add State</strong> to start.</p>
-            </div>
-          ) : (
-            <div className="admin-table-container">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>State Code</th>
-                    <th>State / U.T. Name</th>
-                    <th>Available Languages</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {states.map(s => (
-                    <tr key={s.state_code}>
-                      <td><span className="badge badge-state">{s.state_code}</span></td>
-                      <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{s.state_name}</td>
-                      <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                          {parseLangs(s.available_languages).map(l => (
-                            <span key={l} className="badge">{l}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => openEditState(s)}>Edit</button>
-                          <button className="btn btn-danger btn-sm btn-cta btn-icon-delete" onClick={() => handleDeleteState(s.state_code)}>Delete</button>
-                        </div>
-                      </td>
+                  <div className="fmb-ap-field" style={{ marginTop: 'var(--s-3)' }}>
+                    <span className="fmb-ap-field-label">
+                      Available languages <span className="fmb-ap-required">*</span>
+                    </span>
+                    <div className="fmb-ap-langs">
+                      {LANG_OPTIONS.map(lang => (
+                        <label key={lang} className="fmb-ap-lang-cell">
+                          <input
+                            type="checkbox"
+                            checked={stateForm.available_languages.includes(lang)}
+                            onChange={() => toggleLang(lang)}
+                          />
+                          {lang}
+                        </label>
+                      ))}
+                    </div>
+                    {stateForm.available_languages.length > 0 && (
+                      <div className="fmb-ap-langs-summary">
+                        Selected: {stateForm.available_languages.join(', ')}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="fmb-ap-form-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setShowStateForm(false)}
+                      disabled={savingState}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={savingState}
+                      aria-busy={savingState}
+                      data-testid="state-form-save"
+                    >
+                      {savingState ? 'Saving…' : (editingState ? 'Update' : 'Create')}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* List */}
+            {statesLoading ? (
+              <div data-testid="states-loading" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-2)' }}>
+                {[0, 1, 2].map(i => <div key={i} className="fmb-ap-skel" style={{ height: 44 }} />)}
+              </div>
+            ) : states.length === 0 ? (
+              <div className="fmb-ap-empty" data-testid="states-empty">
+                <div className="fmb-ap-empty-title">No states configured yet</div>
+                <p>Click <strong>+ Add State</strong> to start.</p>
+              </div>
+            ) : (
+              <div className="fmb-ap-table-wrap">
+                <table className="fmb-ap-table" data-testid="states-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">State Code</th>
+                      <th scope="col">State / U.T. Name</th>
+                      <th scope="col">Available Languages</th>
+                      <th scope="col" style={{ width: 1, whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {states.map(s => (
+                      <tr key={s.state_code} data-testid="state-row">
+                        <td><span className="fmb-ap-badge state-code">{s.state_code}</span></td>
+                        <td style={{ fontWeight: 500 }}>{s.state_name}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {parseLangs(s.available_languages).map(l => (
+                              <span key={l} className="fmb-ap-badge">{l}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="fmb-ap-row-actions">
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditState(s)}>Edit</button>
+                            <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteState(s.state_code)}>Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
       )}
 
       {/* ══════════ USER MANAGEMENT TAB ══════════ */}
       {activeTab === 'users' && (
-        <div>
-          <div className="list-header" style={{ marginBottom: '1rem' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-1)' }}>
-              User Management
-            </h3>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                aria-expanded={showInviteForm}
-                aria-controls="add-user-form"
-                className={`btn btn-primary btn-sm btn-cta ${showInviteForm ? 'btn-icon-cancel' : 'btn-icon-create'}`}
-                onClick={() => (showInviteForm ? closeInviteForm() : openInviteForm())}
-              >
-                {showInviteForm ? 'Cancel' : 'Add User'}
-              </button>
-              {SHOW_LEGACY_CREATE && (
-                <button
-                  className="btn btn-secondary btn-sm btn-cta"
-                  onClick={() => { setShowLegacyCreate(v => !v); setShowInviteForm(false); }}
-                  title="Create a username/password user (legacy path)"
-                >
-                  {showLegacyCreate ? 'Hide legacy' : 'Legacy create'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Load-level error (list failed to fetch) — separate from submit error.
-              Always offers a Retry button instead of leaving the user stuck. */}
-          {usersError && (
-            <div className="error-message" role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-              <span>{usersError}</span>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={loadUsers}>
-                Retry
-              </button>
-            </div>
+        <div
+          className="fmb-ap-panel"
+          role="tabpanel"
+          id="admin-users-panel"
+          aria-labelledby="admin-users-tab"
+          data-testid="admin-users-panel"
+        >
+          {/* Summary metrics */}
+          {!usersLoading && users.length > 0 && (
+            <section className="fmb-ap-section" aria-label="User management summary">
+              <div className="fmb-ap-metrics">
+                <div className="fmb-ap-metric brand">
+                  <span className="fmb-ap-metric-label">Total users</span>
+                  <span className="fmb-ap-metric-value">{userMetrics.total}</span>
+                </div>
+                <div className="fmb-ap-metric accent">
+                  <span className="fmb-ap-metric-label">Active</span>
+                  <span className="fmb-ap-metric-value">{userMetrics.active}</span>
+                </div>
+                <div className="fmb-ap-metric">
+                  <span className="fmb-ap-metric-label">Admins</span>
+                  <span className="fmb-ap-metric-value">{userMetrics.admins}</span>
+                </div>
+                <div className="fmb-ap-metric">
+                  <span className="fmb-ap-metric-label">State users</span>
+                  <span className="fmb-ap-metric-value">{userMetrics.stateUsers}</span>
+                </div>
+              </div>
+            </section>
           )}
 
-          {showInviteForm && (
-            <div className="admin-form-card" id="add-user-form">
-              <h3>Add User</h3>
-              <p className="text-muted" style={{ marginTop: 0 }}>
-                The user will sign in via Google with this exact email. No password is needed.
-              </p>
-              {usersFormError && (
-                <div className="error-message" role="alert" data-testid="invite-form-error">{usersFormError}</div>
-              )}
-              <form onSubmit={handleAddUser} noValidate>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="invite-email">Email <span className="required">*</span></label>
-                    <input
-                      id="invite-email"
-                      ref={emailInputRef}
-                      type="email"
-                      autoComplete="email"
-                      value={inviteForm.email}
-                      aria-invalid={!!inviteFieldErrors.email}
-                      aria-describedby={inviteFieldErrors.email ? 'invite-email-err' : undefined}
-                      onChange={e => {
-                        const v = e.target.value;
-                        setInviteForm(p => ({ ...p, email: v }));
-                        if (inviteFieldErrors.email) {
-                          setInviteFieldErrors(err => ({ ...err, email: undefined }));
-                        }
-                      }}
-                      placeholder="someone@example.com"
-                      disabled={submittingInvite}
-                    />
-                    {inviteFieldErrors.email && (
-                      <div id="invite-email-err" className="field-error" style={{ color: 'var(--danger, #c33)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                        {inviteFieldErrors.email}
+          <section className="fmb-ap-section" aria-labelledby="admin-users-h">
+            <header className="fmb-ap-section-head with-actions">
+              <div>
+                <h3 id="admin-users-h" className="fmb-ap-section-title">User Management</h3>
+                <p className="fmb-ap-section-sub">Invite users by email — they sign in with Google using that exact address.</p>
+              </div>
+              <div className="fmb-ap-toolbar">
+                <button
+                  type="button"
+                  aria-expanded={showInviteForm}
+                  aria-controls="add-user-form"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => (showInviteForm ? closeInviteForm() : openInviteForm())}
+                  data-testid="user-add"
+                >
+                  {showInviteForm ? 'Cancel' : (<><Icon name="plus" size={14} /> Add User</>)}
+                </button>
+                {SHOW_LEGACY_CREATE && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setShowLegacyCreate(v => !v); setShowInviteForm(false); }}
+                    title="Create a username/password user (legacy path)"
+                  >
+                    {showLegacyCreate ? 'Hide legacy' : 'Legacy create'}
+                  </button>
+                )}
+              </div>
+            </header>
+
+            {/* Load-level error — separate from submit error.
+                Always offers a Retry button. */}
+            {usersError && (
+              <div className="fmb-ap-error-banner" role="alert">
+                <span className="fmb-ap-error-banner-msg">{usersError}</span>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={loadUsers}>Retry</button>
+              </div>
+            )}
+
+            {showInviteForm && (
+              <div className="fmb-ap-section" style={{ background: 'var(--surface-2)' }} id="add-user-form" data-testid="invite-form">
+                <header className="fmb-ap-section-head">
+                  <h3 className="fmb-ap-section-title">Add user</h3>
+                  <p className="fmb-ap-section-sub">The user will sign in via Google with this exact email. No password is needed.</p>
+                </header>
+                {usersFormError && (
+                  <div className="fmb-ap-error-banner" role="alert" data-testid="invite-form-error">
+                    <span className="fmb-ap-error-banner-msg">{usersFormError}</span>
+                  </div>
+                )}
+                <form onSubmit={handleAddUser} noValidate>
+                  <div className="fmb-ap-form-grid">
+                    <div className="fmb-ap-field">
+                      <label htmlFor="invite-email" className="fmb-ap-field-label">
+                        Email <span className="fmb-ap-required">*</span>
+                      </label>
+                      <input
+                        id="invite-email"
+                        ref={emailInputRef}
+                        type="email"
+                        autoComplete="email"
+                        value={inviteForm.email}
+                        aria-invalid={!!inviteFieldErrors.email}
+                        aria-describedby={inviteFieldErrors.email ? 'invite-email-err' : undefined}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setInviteForm(p => ({ ...p, email: v }));
+                          if (inviteFieldErrors.email) {
+                            setInviteFieldErrors(err => ({ ...err, email: undefined }));
+                          }
+                        }}
+                        placeholder="someone@example.com"
+                        disabled={submittingInvite}
+                        className="fmb-ap-field-input"
+                      />
+                      {inviteFieldErrors.email && (
+                        <div id="invite-email-err" className="fmb-ap-field-error">
+                          {inviteFieldErrors.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="fmb-ap-field">
+                      <label htmlFor="invite-name" className="fmb-ap-field-label">Name</label>
+                      <input
+                        id="invite-name"
+                        type="text"
+                        autoComplete="name"
+                        value={inviteForm.name}
+                        onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Display name (optional)"
+                        disabled={submittingInvite}
+                        className="fmb-ap-field-input"
+                      />
+                    </div>
+                    <div className="fmb-ap-field">
+                      <label htmlFor="invite-role" className="fmb-ap-field-label">Role</label>
+                      <select
+                        id="invite-role"
+                        value={inviteForm.role}
+                        onChange={e => setInviteForm(p => ({ ...p, role: e.target.value, stateCode: e.target.value === 'admin' ? '' : p.stateCode }))}
+                        disabled={submittingInvite}
+                        className="fmb-ap-field-select"
+                      >
+                        <option value="state">State</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    {inviteForm.role === 'state' && (
+                      <div className="fmb-ap-field">
+                        <label htmlFor="invite-state" className="fmb-ap-field-label">
+                          State <span className="fmb-ap-required">*</span>
+                        </label>
+                        <select
+                          id="invite-state"
+                          value={inviteForm.stateCode}
+                          aria-invalid={!!inviteFieldErrors.stateCode}
+                          aria-describedby={inviteFieldErrors.stateCode ? 'invite-state-err' : undefined}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setInviteForm(p => ({ ...p, stateCode: v }));
+                            if (inviteFieldErrors.stateCode) {
+                              setInviteFieldErrors(err => ({ ...err, stateCode: undefined }));
+                            }
+                          }}
+                          disabled={submittingInvite || statesLoading}
+                          className="fmb-ap-field-select"
+                        >
+                          <option value="">
+                            {statesLoading ? 'Loading states…' : (states.length ? 'Select a state…' : 'No states available')}
+                          </option>
+                          {states.map(s => (
+                            <option key={s.state_code} value={s.state_code}>
+                              {s.state_code} — {s.state_name}
+                            </option>
+                          ))}
+                        </select>
+                        {!statesLoading && states.length === 0 && (
+                          <div className="fmb-ap-field-help">
+                            {statesError
+                              ? <>States failed to load. <button type="button" className="link" onClick={loadStates}>Retry</button></>
+                              : 'No states configured. Add a state first, then come back.'}
+                          </div>
+                        )}
+                        {inviteFieldErrors.stateCode && (
+                          <div id="invite-state-err" className="fmb-ap-field-error">
+                            {inviteFieldErrors.stateCode}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                  <div className="form-group">
-                    <label htmlFor="invite-name">Name</label>
-                    <input
-                      id="invite-name"
-                      type="text"
-                      autoComplete="name"
-                      value={inviteForm.name}
-                      onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
-                      placeholder="Display name (optional)"
-                      disabled={submittingInvite}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="invite-role">Role</label>
-                    <select
-                      id="invite-role"
-                      value={inviteForm.role}
-                      onChange={e => setInviteForm(p => ({ ...p, role: e.target.value, stateCode: e.target.value === 'admin' ? '' : p.stateCode }))}
+                  <div className="fmb-ap-form-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={closeInviteForm}
                       disabled={submittingInvite}
                     >
-                      <option value="state">State</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  {inviteForm.role === 'state' && (
-                    <div className="form-group">
-                      <label htmlFor="invite-state">State <span className="required">*</span></label>
-                      <select
-                        id="invite-state"
-                        value={inviteForm.stateCode}
-                        aria-invalid={!!inviteFieldErrors.stateCode}
-                        aria-describedby={inviteFieldErrors.stateCode ? 'invite-state-err' : undefined}
-                        onChange={e => {
-                          const v = e.target.value;
-                          setInviteForm(p => ({ ...p, stateCode: v }));
-                          if (inviteFieldErrors.stateCode) {
-                            setInviteFieldErrors(err => ({ ...err, stateCode: undefined }));
-                          }
-                        }}
-                        disabled={submittingInvite || statesLoading}
-                      >
-                        <option value="">
-                          {statesLoading ? 'Loading states…' : (states.length ? 'Select a state…' : 'No states available')}
-                        </option>
-                        {states.map(s => (
-                          <option key={s.state_code} value={s.state_code}>
-                            {s.state_code} — {s.state_name}
-                          </option>
-                        ))}
-                      </select>
-                      {/* If state config failed to load, tell the user why and how to recover */}
-                      {!statesLoading && states.length === 0 && (
-                        <div className="field-error" style={{ color: 'var(--text-3)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                          {statesError
-                            ? <>States failed to load. <button type="button" className="link" onClick={loadStates}>Retry</button></>
-                            : 'No states configured. Add a state first, then come back.'}
-                        </div>
-                      )}
-                      {inviteFieldErrors.stateCode && (
-                        <div id="invite-state-err" className="field-error" style={{ color: 'var(--danger, #c33)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                          {inviteFieldErrors.stateCode}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="form-actions">
-                  <button
-                    type="submit"
-                    className="btn btn-primary btn-sm btn-cta btn-icon-create"
-                    disabled={submittingInvite}
-                    aria-busy={submittingInvite}
-                    data-testid="invite-submit"
-                  >
-                    {submittingInvite ? 'Adding…' : 'Add User'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
-                    onClick={closeInviteForm}
-                    disabled={submittingInvite}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {SHOW_LEGACY_CREATE && showLegacyCreate && (
-            <div className="admin-form-card">
-              <h3>Create Legacy User (username + password)</h3>
-              <p className="text-muted" style={{ marginTop: 0 }}>
-                Use only during the migration window. Prefer "Invite User" for new accounts.
-              </p>
-              <form onSubmit={handleLegacyCreate}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Username</label>
-                    <input
-                      type="text"
-                      value={legacyForm.username}
-                      onChange={e => setLegacyForm(p => ({ ...p, username: e.target.value }))}
-                      placeholder="Enter username"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Password</label>
-                    <input
-                      type="password"
-                      value={legacyForm.password}
-                      onChange={e => setLegacyForm(p => ({ ...p, password: e.target.value }))}
-                      placeholder="Enter password"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Role</label>
-                    <select
-                      value={legacyForm.role}
-                      onChange={e => setLegacyForm(p => ({ ...p, role: e.target.value }))}
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm"
+                      disabled={submittingInvite}
+                      aria-busy={submittingInvite}
+                      data-testid="invite-submit"
                     >
-                      <option value="state">State</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                      {submittingInvite ? 'Adding…' : 'Add User'}
+                    </button>
                   </div>
-                  {legacyForm.role === 'state' && (
-                    <div className="form-group">
-                      <label>State</label>
+                </form>
+              </div>
+            )}
+
+            {SHOW_LEGACY_CREATE && showLegacyCreate && (
+              <div className="fmb-ap-section" style={{ background: 'var(--surface-2)' }}>
+                <header className="fmb-ap-section-head">
+                  <h3 className="fmb-ap-section-title">Create legacy user (username + password)</h3>
+                  <p className="fmb-ap-section-sub">Use only during the migration window. Prefer "Add User" for new accounts.</p>
+                </header>
+                <form onSubmit={handleLegacyCreate} noValidate>
+                  <div className="fmb-ap-form-grid">
+                    <div className="fmb-ap-field">
+                      <label className="fmb-ap-field-label">Username</label>
+                      <input
+                        type="text"
+                        value={legacyForm.username}
+                        onChange={e => setLegacyForm(p => ({ ...p, username: e.target.value }))}
+                        placeholder="Enter username"
+                        className="fmb-ap-field-input"
+                      />
+                    </div>
+                    <div className="fmb-ap-field">
+                      <label className="fmb-ap-field-label">Password</label>
+                      <input
+                        type="password"
+                        value={legacyForm.password}
+                        onChange={e => setLegacyForm(p => ({ ...p, password: e.target.value }))}
+                        placeholder="Enter password"
+                        className="fmb-ap-field-input"
+                      />
+                    </div>
+                    <div className="fmb-ap-field">
+                      <label className="fmb-ap-field-label">Role</label>
                       <select
-                        value={legacyForm.stateCode}
-                        onChange={e => setLegacyForm(p => ({ ...p, stateCode: e.target.value }))}
+                        value={legacyForm.role}
+                        onChange={e => setLegacyForm(p => ({ ...p, role: e.target.value }))}
+                        className="fmb-ap-field-select"
                       >
-                        <option value="">Select a state…</option>
-                        {states.map(s => (
-                          <option key={s.state_code} value={s.state_code}>
-                            {s.state_code} — {s.state_name}
-                          </option>
-                        ))}
+                        <option value="state">State</option>
+                        <option value="admin">Admin</option>
                       </select>
                     </div>
-                  )}
-                </div>
-                <div className="form-actions">
-                  <button type="submit" className="btn btn-primary btn-sm btn-cta btn-icon-create">Create</button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
-                    onClick={() => setShowLegacyCreate(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
+                    {legacyForm.role === 'state' && (
+                      <div className="fmb-ap-field">
+                        <label className="fmb-ap-field-label">State</label>
+                        <select
+                          value={legacyForm.stateCode}
+                          onChange={e => setLegacyForm(p => ({ ...p, stateCode: e.target.value }))}
+                          className="fmb-ap-field-select"
+                        >
+                          <option value="">Select a state…</option>
+                          {states.map(s => (
+                            <option key={s.state_code} value={s.state_code}>
+                              {s.state_code} — {s.state_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <div className="fmb-ap-form-actions">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowLegacyCreate(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary btn-sm">Create</button>
+                  </div>
+                </form>
+              </div>
+            )}
 
-          {usersLoading ? (
-            <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: '3rem' }} data-testid="users-loading">
-              Loading users…
-            </div>
-          ) : users.length === 0 && !usersError ? (
-            <div className="empty-state" data-testid="users-empty">
-              <p>No users yet. Click <strong>Add User</strong> to invite someone by email.</p>
-            </div>
-          ) : (
-            <div className="admin-table-container">
-              <table className="admin-table" data-testid="users-table">
-                <thead>
-                  <tr>
-                    {['ID', 'Identity', 'Auth', 'Role', 'State', 'Status', 'Invited / Last login', 'Actions'].map(h => (
-                      <th key={h}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(u => (
-                    <tr key={u.id}>
-                      {editingUser === u.id ? (
-                        <>
-                          <td className="text-muted">{u.id}</td>
-                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>
-                            <div>{u.email || u.username || '—'}</div>
-                            <input
-                              type="text"
-                              className="input-sm"
-                              value={editForm.name}
-                              onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
-                              placeholder="Name"
-                              style={{ marginTop: '0.25rem' }}
-                            />
-                          </td>
-                          <td>{authSourceBadge(u)}</td>
-                          <td>
-                            <select
-                              style={{ width: 90 }}
-                              value={editForm.role}
-                              onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
-                            >
-                              <option value="state">State</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                          </td>
-                          <td>
-                            {editForm.role === 'state' ? (
-                              <select
-                                value={editForm.stateCode}
-                                onChange={e => setEditForm(p => ({ ...p, stateCode: e.target.value }))}
-                              >
-                                <option value="">Select…</option>
-                                {states.map(s => (
-                                  <option key={s.state_code} value={s.state_code}>{s.state_code}</option>
-                                ))}
-                              </select>
-                            ) : <span className="text-muted">—</span>}
-                          </td>
-                          <td>
-                            <select
-                              style={{ width: 100 }}
-                              value={editForm.isActive ? 'active' : 'inactive'}
-                              onChange={e => setEditForm(p => ({ ...p, isActive: e.target.value === 'active' }))}
-                            >
-                              <option value="active">Active</option>
-                              <option value="inactive">Inactive</option>
-                            </select>
-                          </td>
-                          <td className="text-muted">
-                            <div>Inv: {fmtDate(u.invitedAt)}</div>
-                            <div>Last: {fmtDate(u.lastLoginAt)}</div>
-                          </td>
-                          <td>
-                            <div className="admin-edit-actions">
-                              {u.username && (
-                                <input
-                                  type="password"
-                                  className="input-sm"
-                                  style={{ width: 140 }}
-                                  value={editForm.password}
-                                  onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
-                                  placeholder="New password (opt.)"
-                                />
-                              )}
-                              <button className="btn btn-primary btn-sm btn-cta btn-icon-save" onClick={() => handleUpdate(u.id)}>Save</button>
-                              <button className="btn btn-secondary btn-sm btn-cta btn-icon-cancel" onClick={() => setEditingUser(null)}>Cancel</button>
-                            </div>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="text-muted">{u.id}</td>
-                          <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>
-                            <div>{u.email || u.username || '—'}</div>
-                            {u.name && <div className="text-muted" style={{ fontSize: '0.8rem' }}>{u.name}</div>}
-                          </td>
-                          <td>{authSourceBadge(u)}</td>
-                          <td>
-                            <span className={`badge ${u.role === 'admin' ? 'badge-role-admin' : ''}`}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td>{u.stateCode || <span className="text-muted">—</span>}</td>
-                          <td>
-                            <span className={`badge ${u.isActive ? 'badge-active' : 'badge-inactive'}`}>
-                              {u.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="text-muted" style={{ fontSize: '0.8rem' }}>
-                            <div>Inv: {fmtDate(u.invitedAt)}</div>
-                            <div>Last: {fmtDate(u.lastLoginAt)}</div>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              <button className="btn btn-secondary btn-sm btn-edit btn-cta btn-icon-edit" onClick={() => startEdit(u)}>Edit</button>
-                              {!u.email && (
-                                <button
-                                  className="btn btn-secondary btn-sm btn-cta"
-                                  onClick={() => openAttach(u)}
-                                  title="Attach an email so this user can sign in with Google"
-                                >
-                                  Convert
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </>
-                      )}
+            {/* Users list */}
+            {usersLoading ? (
+              <div data-testid="users-loading" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s-2)' }}>
+                {[0, 1, 2].map(i => <div key={i} className="fmb-ap-skel" style={{ height: 44 }} />)}
+              </div>
+            ) : users.length === 0 && !usersError ? (
+              <div className="fmb-ap-empty" data-testid="users-empty">
+                <div className="fmb-ap-empty-title">No users yet</div>
+                <p>Click <strong>Add User</strong> to invite someone by email.</p>
+              </div>
+            ) : (
+              <div className="fmb-ap-table-wrap">
+                <table className="fmb-ap-table" data-testid="users-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">ID</th>
+                      <th scope="col">Identity</th>
+                      <th scope="col">Auth</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">State</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Invited / Last login</th>
+                      <th scope="col" style={{ width: 1, whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {users.map(u => (
+                      <tr key={u.id} data-testid="user-row">
+                        {editingUser === u.id ? (
+                          <>
+                            <td style={{ color: 'var(--text-3, #6b6b73)' }}>{u.id}</td>
+                            <td>
+                              <div className="ident">
+                                <span className="ident-primary">{u.email || u.username || '—'}</span>
+                                <input
+                                  type="text"
+                                  className="fmb-ap-input-sm"
+                                  value={editForm.name}
+                                  onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                                  placeholder="Name"
+                                />
+                              </div>
+                            </td>
+                            <td>{authSourceBadge(u)}</td>
+                            <td>
+                              <select
+                                value={editForm.role}
+                                onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+                                className="fmb-ap-input-sm"
+                                style={{ minWidth: 90 }}
+                              >
+                                <option value="state">State</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </td>
+                            <td>
+                              {editForm.role === 'state' ? (
+                                <select
+                                  value={editForm.stateCode}
+                                  onChange={e => setEditForm(p => ({ ...p, stateCode: e.target.value }))}
+                                  className="fmb-ap-input-sm"
+                                >
+                                  <option value="">Select…</option>
+                                  {states.map(s => (
+                                    <option key={s.state_code} value={s.state_code}>{s.state_code}</option>
+                                  ))}
+                                </select>
+                              ) : <span style={{ color: 'var(--text-3, #6b6b73)' }}>—</span>}
+                            </td>
+                            <td>
+                              <select
+                                value={editForm.isActive ? 'active' : 'inactive'}
+                                onChange={e => setEditForm(p => ({ ...p, isActive: e.target.value === 'active' }))}
+                                className="fmb-ap-input-sm"
+                              >
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                              </select>
+                            </td>
+                            <td style={{ color: 'var(--text-3, #6b6b73)', fontSize: 11.5 }}>
+                              <div>Inv: {fmtDate(u.invitedAt)}</div>
+                              <div>Last: {fmtDate(u.lastLoginAt)}</div>
+                            </td>
+                            <td>
+                              <div className="fmb-ap-edit-cell">
+                                {u.username && (
+                                  <input
+                                    type="password"
+                                    className="fmb-ap-input-sm"
+                                    style={{ width: 140 }}
+                                    value={editForm.password}
+                                    onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
+                                    placeholder="New password (opt.)"
+                                  />
+                                )}
+                                <button type="button" className="btn btn-primary btn-sm" onClick={() => handleUpdate(u.id)}>Save</button>
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingUser(null)}>Cancel</button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ color: 'var(--text-3, #6b6b73)' }}>{u.id}</td>
+                            <td>
+                              <div className="ident">
+                                <span className="ident-primary">{u.email || u.username || '—'}</span>
+                                {u.name && <span className="ident-sub">{u.name}</span>}
+                              </div>
+                            </td>
+                            <td>{authSourceBadge(u)}</td>
+                            <td>
+                              <span className={`fmb-ap-badge ${u.role === 'admin' ? 'role-admin' : 'role-state'}`}>
+                                {u.role}
+                              </span>
+                            </td>
+                            <td>{u.stateCode || <span style={{ color: 'var(--text-3, #6b6b73)' }}>—</span>}</td>
+                            <td>
+                              <span className={`fmb-ap-badge ${u.isActive ? 'active' : 'inactive'}`}>
+                                {u.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td style={{ color: 'var(--text-3, #6b6b73)', fontSize: 11.5 }}>
+                              <div>Inv: {fmtDate(u.invitedAt)}</div>
+                              <div>Last: {fmtDate(u.lastLoginAt)}</div>
+                            </td>
+                            <td>
+                              <div className="fmb-ap-row-actions">
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEdit(u)}>Edit</button>
+                                {!u.email && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => openAttach(u)}
+                                    title="Attach an email so this user can sign in with Google"
+                                  >
+                                    Convert
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
       )}
 
       {/* ══════════ ATTACH EMAIL MODAL ══════════ */}
       {attachTarget && (
         <div
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-          }}
+          className="fmb-ap-modal-backdrop"
           onClick={() => setAttachTarget(null)}
+          role="presentation"
         >
           <div
-            className="admin-form-card"
-            style={{ maxWidth: '500px', width: '90%' }}
+            className="fmb-ap-modal"
             onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="attach-modal-title"
           >
-            <h3>Convert "{attachTarget.username || `#${attachTarget.id}`}" to Google sign-in</h3>
-            <p className="text-muted">
+            <h3 id="attach-modal-title" className="fmb-ap-modal-title">
+              Convert "{attachTarget.username || `#${attachTarget.id}`}" to Google sign-in
+            </h3>
+            <p className="fmb-ap-section-sub">
               Attaching an email lets this user sign in with Google. The username/password
               login keeps working until you set <code>LEGACY_LOGIN_ENABLED=false</code>.
             </p>
-            {attachError && <div className="error-message">{attachError}</div>}
-            <form onSubmit={handleAttach}>
-              <div className="form-group">
-                <label>Email <span className="required">*</span></label>
-                <input
-                  type="email"
-                  value={attachForm.email}
-                  onChange={e => setAttachForm(p => ({ ...p, email: e.target.value }))}
-                  placeholder="user@example.com"
-                  autoFocus
-                />
+            {attachError && (
+              <div className="fmb-ap-error-banner" role="alert">
+                <span className="fmb-ap-error-banner-msg">{attachError}</span>
               </div>
-              <div className="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  value={attachForm.name}
-                  onChange={e => setAttachForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="Display name (optional)"
-                />
+            )}
+            <form onSubmit={handleAttach} noValidate>
+              <div className="fmb-ap-form-grid">
+                <div className="fmb-ap-field">
+                  <label htmlFor="attach-email" className="fmb-ap-field-label">
+                    Email <span className="fmb-ap-required">*</span>
+                  </label>
+                  <input
+                    id="attach-email"
+                    type="email"
+                    value={attachForm.email}
+                    onChange={e => setAttachForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder="user@example.com"
+                    autoFocus
+                    className="fmb-ap-field-input"
+                  />
+                </div>
+                <div className="fmb-ap-field">
+                  <label htmlFor="attach-name" className="fmb-ap-field-label">Name</label>
+                  <input
+                    id="attach-name"
+                    type="text"
+                    value={attachForm.name}
+                    onChange={e => setAttachForm(p => ({ ...p, name: e.target.value }))}
+                    placeholder="Display name (optional)"
+                    className="fmb-ap-field-input"
+                  />
+                </div>
               </div>
-              <div className="form-actions">
-                <button type="submit" className="btn btn-primary btn-sm btn-cta" disabled={attachSaving}>
-                  {attachSaving ? 'Saving…' : 'Attach Email'}
-                </button>
+              <div className="fmb-ap-form-actions">
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
+                  className="btn btn-secondary btn-sm"
                   onClick={() => setAttachTarget(null)}
+                  disabled={attachSaving}
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={attachSaving}
+                  aria-busy={attachSaving}
+                >
+                  {attachSaving ? 'Saving…' : 'Attach Email'}
                 </button>
               </div>
             </form>

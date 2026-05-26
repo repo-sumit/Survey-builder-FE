@@ -3,19 +3,22 @@ const { test, expect } = require('./fixtures');
 
 test.describe('Admin Panel — Add User', () => {
   test('opens form, validates email, submits successfully, refreshes list', async ({ asAdmin: page }) => {
-    let getCount = 0;
+    // Track add completion rather than GET count: AdminPanel mounts under
+    // React.StrictMode in dev which double-invokes useEffect, so any
+    // hard-coded GET count would race the second initial-mount fetch.
+    let userAdded = false;
     await page.route('**/api/admin/users', async (route) => {
       const req = route.request();
       if (req.method() === 'GET') {
-        getCount++;
-        const body = getCount === 1
-          ? '[]'
-          : JSON.stringify([
+        const body = userAdded
+          ? JSON.stringify([
               { id: 9, email: 'butter@example.com', name: 'New User', role: 'state', stateCode: 'HP', isActive: true, authSource: 'google' }
-            ]);
+            ])
+          : '[]';
         return route.fulfill({ status: 200, contentType: 'application/json', body });
       }
       if (req.method() === 'POST') {
+        userAdded = true;
         return route.fulfill({
           status: 201, contentType: 'application/json',
           body: JSON.stringify({ id: 9, email: 'butter@example.com', role: 'state', stateCode: 'HP', isActive: true })
@@ -52,9 +55,11 @@ test.describe('Admin Panel — Add User', () => {
 
     // Form closes
     await expect(page.getByTestId('invite-submit')).toHaveCount(0);
-    // List refreshed
+    // List refreshed — scope the lookup to the users-table so the success
+    // toast (which also embeds the email "User added: …") doesn't trip
+    // Playwright's strict-mode match.
     await expect(page.getByTestId('users-table')).toBeVisible();
-    await expect(page.locator('text=butter@example.com')).toBeVisible();
+    await expect(page.getByTestId('users-table').getByText('butter@example.com')).toBeVisible();
   });
 
   test('shows duplicate email error and keeps form open with inputs preserved', async ({ asAdmin: page }) => {

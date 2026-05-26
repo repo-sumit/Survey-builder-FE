@@ -131,38 +131,61 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Boot once + subscribe to Supabase auth events.
+  //
+  // Two subtleties make this effect different from a "normal" mount-once
+  // effect:
+  //
+  //   1. React 18 StrictMode synthetically unmounts + remounts the effect
+  //      in development. Before this revision, the effect early-returned
+  //      via `bootedRef` on the second mount, AND the first mount's
+  //      cleanup had set a `cancelled` flag that skipped
+  //      `setLoading(false)`. Net effect: in dev mode, loading was stuck
+  //      true forever and the Supabase subscription wasn't re-attached.
+  //
+  //      Fix:
+  //        - Boot runs once across the strict double-mount (still gated
+  //          by `bootedRef`), but no longer gates its `setLoading(false)`
+  //          on a `cancelled` flag. React 18 silently no-ops `setState`
+  //          on truly-unmounted components, so the previous guard was
+  //          defending against a warning that doesn't exist anymore.
+  //        - The Supabase auth subscription re-attaches on every effect
+  //          invocation so the strict cleanup-then-resetup leaves us with
+  //          a live listener at all times.
+  //
+  //   2. We still need `BOOT_TIMEOUT_MS` to bound the whole boot so a
+  //      stalled Supabase getSession can't hang loading=true. That
+  //      Promise.race is preserved verbatim.
   useEffect(() => {
-    if (bootedRef.current) return;
-    bootedRef.current = true;
+    if (!bootedRef.current) {
+      bootedRef.current = true;
 
-    let cancelled = false;
-
-    async function bootInner() {
-      if (isSupabaseConfigured && supabase) {
-        const { data } = await supabase.auth.getSession();
-        supabaseSessionRef.current = data?.session || null;
-      }
-      if (supabaseSessionRef.current) {
-        await resolveProfile();
-      }
-    }
-
-    async function boot() {
-      try {
-        await Promise.race([bootInner(), deadline(BOOT_TIMEOUT_MS, 'AUTH_BOOT_TIMEOUT')]);
-      } catch (err) {
-        if (err.message === 'AUTH_BOOT_TIMEOUT') {
-          console.error('[auth] boot timeout — falling back to unauthenticated');
-          setAuthReason('BOOT_TIMEOUT');
+      const bootInner = async () => {
+        if (isSupabaseConfigured && supabase) {
+          const { data } = await supabase.auth.getSession();
+          supabaseSessionRef.current = data?.session || null;
         }
-        await purgeBrowserAuthArtifacts();
-        setUser(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
+        if (supabaseSessionRef.current) {
+          await resolveProfile();
+        }
+      };
 
-    boot();
+      (async () => {
+        try {
+          await Promise.race([bootInner(), deadline(BOOT_TIMEOUT_MS, 'AUTH_BOOT_TIMEOUT')]);
+        } catch (err) {
+          if (err && err.message === 'AUTH_BOOT_TIMEOUT') {
+            console.error('[auth] boot timeout — falling back to unauthenticated');
+            setAuthReason('BOOT_TIMEOUT');
+          }
+          await purgeBrowserAuthArtifacts();
+          setUser(null);
+        } finally {
+          // Always settle loading — see comment block above for why we
+          // don't gate this on a cancelled flag any more.
+          setLoading(false);
+        }
+      })();
+    }
 
     let sub;
     if (isSupabaseConfigured && supabase) {
@@ -178,7 +201,6 @@ export function AuthProvider({ children }) {
     }
 
     return () => {
-      cancelled = true;
       if (sub) sub.unsubscribe();
     };
     // resolveProfile is stable (useCallback w/ empty deps). Run once.

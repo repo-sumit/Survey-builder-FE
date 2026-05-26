@@ -60,6 +60,23 @@ const renderApp = () => {
   );
 };
 
+// Renders the same tree wrapped in React.StrictMode so each effect runs
+// setup → cleanup → setup again on mount. Used to lock in Phase 5.6's
+// regression: previously, the boot effect's cancelled-flag plus
+// bootedRef early-return left the dev tree stuck at loading=true.
+const renderAppStrict = () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <React.StrictMode>
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <Probe />
+        </AuthProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
+};
+
 describe('AuthContext bootstrap', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -201,6 +218,51 @@ describe('AuthContext.logout', () => {
     expect(localStorage.getItem('sb-xxx-auth-token')).toBeNull();
     expect(sessionStorage.getItem('scratch')).toBeNull();
     expect(localStorage.getItem('app-pref-theme')).toBe('dark');
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+  });
+});
+
+describe('AuthContext bootstrap — React 18 StrictMode (Phase 5.6 regression)', () => {
+  // Phase 5.6 root-cause: in dev, the boot effect's first invocation set
+  // cancelled=true on strict-cleanup, and the second invocation
+  // early-returned via bootedRef — so the only path to setLoading(false)
+  // (gated on `!cancelled`) was skipped. App stayed loading=true forever.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  test('unauthenticated boot under StrictMode still settles loading=false', async () => {
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderAppStrict();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(authAPI.me).not.toHaveBeenCalled();
+  });
+
+  test('valid session boot under StrictMode resolves to user + loading=false', async () => {
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ role: 'admin', email: 'a@b.com' });
+    renderAppStrict();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    expect(screen.getByTestId('loading').textContent).toBe('false');
+    // resolvingRef guards /me from being called twice even if both
+    // strict-mount invocations attempted to boot.
+    expect(authAPI.me).toHaveBeenCalledTimes(1);
+  });
+
+  test('403 NOT_INVITED under StrictMode sets the reason banner AND settles loading', async () => {
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({ response: { status: 403, data: { error: 'NOT_INVITED' } } });
+    renderAppStrict();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('reason').textContent).toBe('NOT_INVITED');
     expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
   });
 });

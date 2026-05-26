@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
-const BRAND_LOGO_URL = 'https://i.ibb.co/Wv5BJFsZ/swiftchat.png';
+// ConveGenius brand asset (matches Phase 4 Login + Phase 5.5 AccessDenied).
+// Served from /public/assets — no third-party network dependency.
+const BRAND_LOGO_URL = '/assets/cg-logo.png';
 
 const SLOW_MS = 4000;
 const STALE_MS = 12000;

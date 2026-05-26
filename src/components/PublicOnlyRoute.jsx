@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AppLoader from './AppLoader';
+import { ACCESS_DENIED_REASONS } from './AccessDenied';
 
 /**
  * Wrap routes that should ONLY be visible to unauthenticated users (e.g. /login).
@@ -23,7 +24,7 @@ import AppLoader from './AppLoader';
  *       - Otherwise render the children (the login form).
  */
 const PublicOnlyRoute = ({ children }) => {
-  const { user, loading, hasPersistedSession } = useAuth();
+  const { user, loading, hasPersistedSession, authReason } = useAuth();
 
   if (loading) {
     return (
@@ -38,6 +39,14 @@ const PublicOnlyRoute = ({ children }) => {
   if (user) {
     const target = user.role === 'admin' ? '/admin' : '/';
     return <Navigate to={target} replace />;
+  }
+
+  // Signed-in but unauthorized users get the dedicated screen rather than
+  // /login. The Login screen still carries its own banner code as a
+  // defensive fallback (e.g. if someone reaches /login directly with the
+  // reason already cleared, no infinite bounce can happen).
+  if (ACCESS_DENIED_REASONS.includes(authReason)) {
+    return <Navigate to="/access-denied" replace />;
   }
 
   return children;

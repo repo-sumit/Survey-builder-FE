@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useToast } from './Toast';
 import WaterAnimation from './WaterAnimation';
+import PageHeader from './ui/PageHeader';
+import Icon from './ui/Icon';
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
@@ -82,6 +84,8 @@ function downloadBlob(content, filename, type = 'text/csv;charset=utf-8') {
   URL.revokeObjectURL(url);
 }
 
+const STEPS = ['Upload', 'Validate', 'Select', 'Import'];
+
 const ImportSurvey = () => {
   const navigate = useNavigate();
   const toast = useToast();
@@ -95,6 +99,7 @@ const ImportSurvey = () => {
   const [overwrite, setOverwrite] = useState(false);
   const [errorFilter, setErrorFilter] = useState('all'); // 'all' | 'survey' | 'question'
   const [columnFilters, setColumnFilters] = useState({ surveyId: '', type: '', row: '', id: '', errors: '' });
+  const fileInputRef = useRef(null);
 
   const resetAll = () => {
     setPreview(null);
@@ -234,10 +239,19 @@ const ImportSurvey = () => {
     }
   };
 
+  const handleClear = () => {
+    setFile(null);
+    resetAll();
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // Combined source of validation errors: prefer the commit response when
   // available (it reflects what the server actually saw on the import attempt),
   // otherwise fall back to the preview's full error list.
-  const sourceErrors = errors?.validationErrors || preview?.validationErrors || [];
+  const sourceErrors = useMemo(
+    () => errors?.validationErrors || preview?.validationErrors || [],
+    [errors, preview]
+  );
 
   // Filter errors to selected surveys (when we have a selection) and apply the
   // type filter (survey / question / all) plus the per-column text filters.
@@ -295,145 +309,223 @@ const ImportSurvey = () => {
     downloadBlob(`﻿${csv}`, `${baseName}-validation-errors.csv`);
   };
 
-  return (
-    <div className="import-survey-container">
+  /* ── Phase derivation for the stepper ───────────────────────── */
+  // Upload  → file selected
+  // Validate → preview successful
+  // Select  → selectedIds chosen
+  // Import  → result successful
+  const currentStep = result ? 3 : (preview ? 2 : (file ? 1 : 0));
+  const isDone = (idx) => result ? true : idx < currentStep;
 
-      {/* Page Header */}
-      <div className="list-header">
-        <div>
-          <h2>Import Survey</h2>
-          <p className="subtitle">Upload an XLSX or CSV file to import surveys and questions</p>
-        </div>
-        <div className="header-actions">
+  return (
+    <div className="fmb-import-page" data-testid="import-page">
+      <PageHeader
+        eyebrow="DATA"
+        title="Import survey"
+        sub="Upload an XLSX or CSV file to bring surveys and questions into the workspace."
+        actions={
           <button
-            className="btn btn-secondary btn-sm btn-cta btn-icon-back"
+            type="button"
+            className="btn btn-secondary btn-sm"
             onClick={() => navigate('/')}
+            data-testid="import-back"
           >
-            Back to Surveys
+            <Icon name="chevronLeft" /> Back to Surveys
           </button>
-        </div>
+        }
+      />
+
+      {/* Stepper */}
+      <div className="fmb-import-steps" data-testid="import-steps" aria-label="Import progress">
+        {STEPS.map((label, idx) => {
+          const stepClass = idx === currentStep
+            ? 'fmb-import-step active'
+            : isDone(idx) ? 'fmb-import-step done' : 'fmb-import-step';
+          return (
+            <React.Fragment key={label}>
+              {idx > 0 && <span className="fmb-import-step-sep" aria-hidden="true">›</span>}
+              <span className={stepClass}>{idx + 1}. {label}</span>
+            </React.Fragment>
+          );
+        })}
       </div>
 
       {/* Instructions */}
-      <div className="import-instructions">
-        <h3>Import Instructions</h3>
+      <section className="fmb-import-section" aria-labelledby="import-instructions-h">
+        <header className="fmb-import-section-head">
+          <h3 id="import-instructions-h" className="fmb-import-section-title">How import works</h3>
+          <p className="fmb-import-section-sub">
+            Click <strong>Preview</strong> to see what's in the file. Pick which surveys to commit, then <strong>Import Selected</strong>.
+          </p>
+        </header>
         <ul>
-          <li>Upload an XLSX file containing both <strong>Survey Master</strong> and <strong>Question Master</strong> sheets</li>
-          <li>Or upload separate CSV files for Survey Master or Question Master</li>
-          <li>Multi-language surveys are supported — questions with the same Survey_ID, Question_ID, and Question_Type will be grouped</li>
-          <li>Click <strong>Preview</strong> first to see the parsed surveys; pick which ones to import</li>
-          <li>By default, existing Survey IDs are rejected to prevent accidental data loss</li>
-          <li>Enable overwrite only when you want to replace existing surveys and their questions</li>
+          <li>Upload an XLSX containing both <strong>Survey Master</strong> and <strong>Question Master</strong> sheets, or separate CSVs.</li>
+          <li>Multi-language surveys are supported — questions sharing Survey_ID + Question_ID + Question_Type are grouped.</li>
+          <li>By default, existing Survey IDs are <strong>rejected</strong> to prevent accidental data loss.</li>
+          <li>Enable overwrite only when you want to replace existing surveys and their questions.</li>
         </ul>
-      </div>
+      </section>
 
-      {/* Upload Form */}
-      <div className="admin-form-card">
+      {/* Upload */}
+      <section className="fmb-import-section" aria-labelledby="import-upload-h">
+        <header className="fmb-import-section-head">
+          <h3 id="import-upload-h" className="fmb-import-section-title">Upload file</h3>
+          <p className="fmb-import-section-sub">Accepted: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong>. Max 10 MB.</p>
+        </header>
 
-        {/* Overwrite checkbox */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        <div className="fmb-import-toggle">
           <input
             type="checkbox"
             id="overwriteCheck"
             checked={overwrite}
             onChange={e => setOverwrite(e.target.checked)}
             disabled={importing || previewing}
-            style={{ marginTop: '0.2rem', width: 'auto', accentColor: 'var(--blue)', cursor: 'pointer', flexShrink: 0 }}
+            data-testid="import-overwrite"
           />
           <div>
-            <label
-              htmlFor="overwriteCheck"
-              style={{
-                display: 'block', marginBottom: '0.2rem', cursor: 'pointer',
-                fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-1)',
-                textTransform: 'none', letterSpacing: 'normal',
-              }}
-            >
+            <label htmlFor="overwriteCheck" className="fmb-import-toggle-label">
               Overwrite existing surveys with matching Survey IDs
             </label>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>
-              Unchecked: duplicates are rejected.&nbsp; Checked: matching surveys and questions are replaced.
-            </span>
+            <p className="fmb-import-toggle-sub">
+              Unchecked: duplicates are rejected. Checked: matching surveys and questions are replaced.
+            </p>
           </div>
         </div>
 
-        {/* File input */}
-        <div className="form-group">
-          <label>
-            Select File&nbsp;
-            <span style={{ color: 'var(--text-3)', fontWeight: 400, textTransform: 'none', letterSpacing: 'normal' }}>
-              (XLSX, XLS or CSV)
-            </span>
-          </label>
+        <div className={`fmb-import-dropzone${file ? ' has-file' : ''}${(importing || previewing) ? ' is-disabled' : ''}`} data-testid="import-dropzone">
+          <span className="fmb-import-dropzone-icon" aria-hidden="true">
+            <Icon name="upload" size={18} />
+          </span>
+          <div className="fmb-import-dropzone-title">
+            {file ? 'File ready — Preview or replace below' : 'Drop a workbook here, or click to choose'}
+          </div>
+          <div className="fmb-import-dropzone-sub">XLSX / XLS / CSV · up to 10 MB</div>
+          {file && (
+            <div className="fmb-import-file-pill" data-testid="import-file-pill">
+              <Icon name="file" size={14} />
+              <code>{file.name}</code>
+              <span className="fmb-import-file-pill-size">{(file.size / 1024).toFixed(2)} KB</span>
+            </div>
+          )}
           <input
+            ref={fileInputRef}
             type="file"
             accept=".xlsx,.xls,.csv"
             onChange={handleFileChange}
-            className="file-input"
             disabled={importing || previewing}
+            aria-label="Select XLSX, XLS, or CSV file to import"
+            data-testid="import-file-input"
           />
-          {file && (
-            <div className="file-selected">
-              <strong>Selected:</strong> {file.name}&nbsp;
-              <span style={{ opacity: 0.75 }}>({(file.size / 1024).toFixed(2)} KB)</span>
-            </div>
-          )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="fmb-import-actions">
           <button
-            className="btn btn-primary btn-cta"
+            type="button"
+            className="btn btn-primary btn-sm"
             onClick={handlePreview}
             disabled={!file || previewing || importing}
+            data-testid="import-preview"
           >
             {previewing ? 'Parsing…' : (preview ? 'Re-parse File' : 'Preview File')}
           </button>
           {preview && (
             <button
-              className="btn btn-success btn-cta btn-icon-import"
+              type="button"
+              className="btn btn-success btn-sm"
               onClick={handleCommitImport}
               disabled={importing || previewing || selectedIds.size === 0 || selectedHaveErrors}
               title={selectedHaveErrors ? 'Fix or unselect surveys with errors first' : ''}
+              data-testid="import-commit"
             >
               {importing ? 'Importing…' : `Import Selected (${selectedIds.size})`}
             </button>
           )}
-        </div>
-        <WaterAnimation active={previewing || importing} />
-      </div>
-
-      {/* Survey selection list */}
-      {preview && preview.surveys && preview.surveys.length > 0 && (
-        <div className="import-survey-picker">
-          <div className="import-survey-picker-header">
-            <h3>Select surveys to import</h3>
+          {(file || preview || errors || result) && (
             <button
               type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={toggleAll}
+              className="btn btn-secondary btn-sm"
+              onClick={handleClear}
+              disabled={importing || previewing}
+              data-testid="import-clear"
             >
-              {selectedIds.size === preview.surveys.length ? 'Deselect All' : 'Select All'}
+              Clear
             </button>
+          )}
+        </div>
+        <WaterAnimation active={previewing || importing} />
+      </section>
+
+      {/* Validation summary metrics */}
+      {preview && (
+        <section className="fmb-import-section" aria-labelledby="import-summary-h" data-testid="import-summary">
+          <header className="fmb-import-section-head">
+            <h3 id="import-summary-h" className="fmb-import-section-title">Preview summary</h3>
+            <p className="fmb-import-section-sub">What we found in the file. Errors below are blocking — fix or unselect those surveys before importing.</p>
+          </header>
+          <div className="fmb-import-metrics">
+            <div className="fmb-import-metric">
+              <span className="fmb-import-metric-label">Surveys</span>
+              <span className="fmb-import-metric-value">{preview.surveys?.length || 0}</span>
+            </div>
+            <div className="fmb-import-metric">
+              <span className="fmb-import-metric-label">Questions</span>
+              <span className="fmb-import-metric-value">{preview.questions?.length || 0}</span>
+            </div>
+            <div className={`fmb-import-metric${sourceErrors.length > 0 ? ' danger' : ' ok'}`}>
+              <span className="fmb-import-metric-label">Issues</span>
+              <span className="fmb-import-metric-value">{sourceErrors.length}</span>
+            </div>
+            <div className="fmb-import-metric">
+              <span className="fmb-import-metric-label">Selected</span>
+              <span className="fmb-import-metric-value">{selectedIds.size}</span>
+            </div>
           </div>
-          <p className="error-summary" style={{ marginBottom: '0.75rem' }}>
-            Found {preview.surveys.length} survey(s) and {preview.questions?.length || 0} question(s) in the file.
-            {selectedHaveErrors && ' One or more selected surveys have validation errors — fix them or unselect those surveys before importing.'}
-          </p>
-          <div className="survey-checkbox-list">
+        </section>
+      )}
+
+      {/* Survey picker */}
+      {preview && preview.surveys && preview.surveys.length > 0 && (
+        <section className="fmb-import-section" aria-labelledby="import-picker-h" data-testid="import-picker">
+          <header className="fmb-import-section-head">
+            <h3 id="import-picker-h" className="fmb-import-section-title">Surveys to import</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <p className="fmb-import-section-sub" style={{ margin: 0 }}>
+                {selectedHaveErrors
+                  ? 'One or more selected surveys have validation errors — fix them or unselect before importing.'
+                  : `${selectedIds.size} of ${preview.surveys.length} selected.`}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={toggleAll}
+                data-testid="import-picker-toggle-all"
+              >
+                {selectedIds.size === preview.surveys.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+          </header>
+
+          <div className="fmb-import-picker">
             {preview.surveys.map(s => {
               const errCount = errorCountsBySurvey[s.surveyId] || 0;
               const checked = selectedIds.has(s.surveyId);
               return (
-                <label key={s.surveyId} className={`survey-checkbox-row ${errCount > 0 ? 'has-errors' : ''}`}>
+                <label
+                  key={s.surveyId}
+                  className={`fmb-import-picker-row${errCount > 0 ? ' has-errors' : ''}`}
+                  data-testid="import-picker-row"
+                  data-survey-id={s.surveyId}
+                >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleSurvey(s.surveyId)}
+                    aria-label={`Select survey ${s.surveyId}`}
                   />
-                  <span className="survey-checkbox-id"><code>{s.surveyId}</code></span>
-                  <span className="survey-checkbox-name">{s.surveyName || ''}</span>
+                  <span className="fmb-import-picker-id">{s.surveyId}</span>
+                  <span className="fmb-import-picker-name">{s.surveyName || ''}</span>
                   {errCount > 0 && (
-                    <span className="survey-checkbox-error-badge">
+                    <span className="fmb-import-picker-errors">
                       {errCount} error{errCount === 1 ? '' : 's'}
                     </span>
                   )}
@@ -441,80 +533,88 @@ const ImportSurvey = () => {
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Success */}
       {result && (
-        <div className="import-success">
-          <h3>Import Successful!</h3>
-          <p>{result.surveysImported} survey(s) and {result.questionsImported} question(s) imported.</p>
-        </div>
+        <section className="fmb-import-success" role="status" data-testid="import-success">
+          <div className="fmb-import-success-title">Import successful</div>
+          <div>{result.surveysImported} survey(s) and {result.questionsImported} question(s) imported.</div>
+        </section>
       )}
 
       {/* Generic Error (no validation errors) */}
       {errors && !errors.validationErrors && (
-        <div className="import-errors">
-          <h3>Import Failed</h3>
-          <p style={{ marginBottom: errors.details ? '0.75rem' : 0 }}>{formatError(errors.error, 'Import failed')}</p>
-          {errors.message && <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{formatError(errors.message)}</p>}
+        <section className="fmb-import-error-card" role="alert" data-testid="import-error-card">
+          <div className="fmb-import-error-card-title">Import failed</div>
+          <div>{formatError(errors.error, 'Import failed')}</div>
+          {errors.message && <div className="fmb-import-error-card-sub">{formatError(errors.message)}</div>}
           {Array.isArray(errors.details?.sheetsFound) && (
-            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-3)' }}>
+            <div className="fmb-import-error-card-sub">
               Sheets found in file: {errors.details.sheetsFound.map(s => `"${s}"`).join(', ') || 'none'}
-            </p>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Validation Errors */}
+      {/* Validation errors */}
       {sourceErrors.length > 0 && (
-        <div className="import-errors">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div>
-              <h3>Validation Errors</h3>
-              <p className="error-summary">
-                Showing {filteredErrors.length} of {sourceErrors.length} issue(s)
-                {selectedIds.size > 0 ? ' — filtered to selected survey(s).' : '.'}
-              </p>
+        <section className="fmb-import-section" aria-labelledby="import-errors-h" data-testid="import-errors">
+          <header className="fmb-import-section-head">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h3 id="import-errors-h" className="fmb-import-section-title">Validation errors</h3>
+                <p className="fmb-import-section-sub">
+                  Showing {filteredErrors.length} of {sourceErrors.length} issue(s)
+                  {selectedIds.size > 0 ? ' — filtered to selected survey(s).' : '.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleDownloadCsv}
+                disabled={filteredErrors.length === 0}
+                data-testid="import-download-csv"
+              >
+                Download CSV
+              </button>
             </div>
+          </header>
+
+          <div className="fmb-import-filter">
             <button
               type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={handleDownloadCsv}
-              disabled={filteredErrors.length === 0}
-            >
-              Download CSV
-            </button>
-          </div>
-
-          {/* Filter tabs */}
-          <div className="error-filter-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button
-              className={`btn btn-sm ${errorFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              className={`fmb-import-filter-btn${errorFilter === 'all' ? ' active' : ''}`}
               onClick={() => setErrorFilter('all')}
+              data-testid="import-filter-all"
             >
               All ({visibleTotal})
             </button>
             {surveyErrorCount > 0 && (
               <button
-                className={`btn btn-sm ${errorFilter === 'survey' ? 'btn-primary' : 'btn-secondary'}`}
+                type="button"
+                className={`fmb-import-filter-btn${errorFilter === 'survey' ? ' active' : ''}`}
                 onClick={() => setErrorFilter('survey')}
+                data-testid="import-filter-survey"
               >
                 Survey ({surveyErrorCount})
               </button>
             )}
             {questionErrorCount > 0 && (
               <button
-                className={`btn btn-sm ${errorFilter === 'question' ? 'btn-primary' : 'btn-secondary'}`}
+                type="button"
+                className={`fmb-import-filter-btn${errorFilter === 'question' ? ' active' : ''}`}
                 onClick={() => setErrorFilter('question')}
+                data-testid="import-filter-question"
               >
                 Question ({questionErrorCount})
               </button>
             )}
           </div>
 
-          <div className="errors-table-container">
-            <table className="errors-table">
+          <div className="fmb-errors-table-wrap">
+            <table className="fmb-errors-table" data-testid="import-errors-table">
               <thead>
                 <tr>
                   <th>Survey ID</th>
@@ -523,15 +623,16 @@ const ImportSurvey = () => {
                   <th>ID</th>
                   <th>Errors</th>
                 </tr>
-                <tr className="errors-table-filter-row">
+                <tr className="fmb-errors-table-filter-row">
                   {['surveyId', 'type', 'row', 'id', 'errors'].map(col => (
                     <th key={col}>
                       <input
                         type="text"
-                        className="errors-table-filter-input"
+                        className="fmb-errors-table-filter-input"
                         placeholder="Search…"
                         value={columnFilters[col]}
                         onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                        aria-label={`Filter by ${col}`}
                       />
                     </th>
                   ))}
@@ -541,11 +642,11 @@ const ImportSurvey = () => {
                 {filteredErrors.map((error, idx) => (
                   <tr key={idx}>
                     <td><code>{error.surveyId || ''}</code></td>
-                    <td><span className={`sheet-badge sheet-badge-${error.type}`}>{error.type}</span></td>
+                    <td><span className={`fmb-errors-sheet-badge ${error.type || ''}`}>{error.type}</span></td>
                     <td>{error.index ?? error.row ?? ''}</td>
                     <td><code>{error.questionId || error.surveyId || ''}</code></td>
                     <td>
-                      <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                      <ul>
                         {(error.errors || []).map((err, errIdx) => (
                           <li key={errIdx}>{formatError(err)}</li>
                         ))}
@@ -556,9 +657,8 @@ const ImportSurvey = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       )}
-
     </div>
   );
 };

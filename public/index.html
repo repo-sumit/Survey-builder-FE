@@ -1,19 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<!--
+  data-theme is set statically here (in addition to runtime updates via
+  useTweaks) so the design tokens in tokens.css that key off
+  `html:root[data-theme="light"]` match on first paint — even on routes
+  outside the AppShell (e.g. /login, /access-denied) where useTweaks
+  doesn't run. This is what pins the design's ConveGenius teal accent
+  against swiftchatRedesign.css's legacy green override.
+-->
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
-    <!-- Favicon link - make sure this points to your favicon -->
-    <link rel="icon" href="https://i.ibb.co/Wv5BJFsZ/swiftchat.png" />
-    
-    <!-- For better browser support, you can also add these -->
-    <link rel="apple-touch-icon" href="https://i.ibb.co/Wv5BJFsZ/swiftchat.png" />
-    
+    <link rel="icon" href="%PUBLIC_URL%/assets/cg-logo.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/assets/cg-logo.png" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="FMB | Survey Builder" />
-    <title>FMB Survey Builder</title>
+    <meta name="theme-color" content="#4b4a93" />
+    <meta name="description" content="FMB Survey Builder — ConveGenius" />
+    <title>FMB Survey Builder — ConveGenius</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Geist is also loaded via tokens.css; keeping Space Grotesk here
+         is harmless and preserves any in-flight references in App.css. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"

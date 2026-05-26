@@ -2,18 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../services/api';
 
-const LOGIN_SIDE_IMAGE = 'https://i.ibb.co/gbgGT6PZ/image-9.png';
-const BRAND_LOGO_URL = 'https://i.ibb.co/Wv5BJFsZ/swiftchat.png';
+const BRAND_LOGO = '/assets/cg-logo.png';
 
-// LEGACY LOGIN — visible toggle no longer used.
-// const LEGACY_LOGIN_VISIBLE = (process.env.REACT_APP_LEGACY_LOGIN_VISIBLE || 'true').toLowerCase() !== 'false';
-
+/* AuthContext can set authReason to any of these codes when /me rejects
+   or the bootstrap times out. The Login screen surfaces a banner so the
+   user understands WHY they were sent back to /login. Keep in sync with
+   `purgeBrowserAuthArtifacts` + `resolveProfile` in AuthContext.jsx. */
 const REASON_MESSAGES = {
-  NOT_INVITED: 'Your Google account is not invited. Ask an admin to invite you by email.',
-  INACTIVE: 'Your account is inactive. Contact an admin to reactivate it.',
-  DOMAIN_BLOCKED: 'This email domain is not allowed. Use an approved corporate email.'
+  NOT_INVITED:   'Your Google account is not invited. Ask an admin to invite you by email.',
+  INACTIVE:      'Your account is inactive. Contact an admin to reactivate it.',
+  DOMAIN_BLOCKED:'This email domain is not allowed. Use an approved corporate email.',
+  BOOT_TIMEOUT:  "We couldn't reach the server in time. The backend may be warming up — please try again."
 };
 
+/* Inline multi-color Google glyph — preserved from the previous Login
+   so the call-to-action is instantly recognizable. */
 const GoogleIcon = () => (
   <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
     <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/>
@@ -23,43 +26,21 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* LEGACY LOGIN — disabled. Kept for reference.
-const INVALID_CREDENTIALS_MESSAGE = 'Please enter correct ID and password.';
-const EyeIcon = ({ crossed = false }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
-    <circle cx="12" cy="12" r="3" />
-    {crossed && <line x1="3" y1="21" x2="21" y2="3" />}
+const WarnIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <path d="M12 9v4M12 17h.01" />
   </svg>
 );
-
-const parseLoginErrorMessage = (err) => {
-  const statusCode = err?.response?.status;
-  const responseError = err?.response?.data?.error;
-  const responseMessage = err?.response?.data?.message;
-  const apiMessage = typeof responseError === 'string'
-    ? responseError
-    : typeof responseError?.message === 'string'
-      ? responseError.message
-      : typeof responseMessage === 'string'
-        ? responseMessage
-        : '';
-
-  if (statusCode === 410) return 'Username/password login is disabled. Sign in with Google.';
-  if (statusCode === 401) return INVALID_CREDENTIALS_MESSAGE;
-  if (/invalid (username|id) or password/i.test(apiMessage)) return INVALID_CREDENTIALS_MESSAGE;
-  const timeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
-  if (timeout) return 'Unable to sign in right now. Please try again.';
-  if (apiMessage) return apiMessage;
-  return 'Login failed. Please try again.';
-};
-end LEGACY LOGIN */
 
 const Login = () => {
   const [error, setError] = useState(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { loginWithGoogle, isSupabaseConfigured, authReason, clearAuthReason } = useAuth();
 
+  // Fire a fast /api/health probe so the backend wakes up while the user
+  // is reading the page. This was preserved exactly from the previous
+  // Login — do not remove (see ADR 0001 §5).
   useEffect(() => {
     authAPI.warmup().catch(() => {});
   }, []);
@@ -78,79 +59,110 @@ const Login = () => {
     }
   };
 
-  /* LEGACY LOGIN — disabled. Kept for reference.
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [legacyOpen, setLegacyOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { loginLegacy } = useAuth();
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    clearAuthReason();
-    if (!username.trim() || !password.trim()) {
-      setError('Username and password are required');
-      return;
-    }
-    try {
-      setLoading(true);
-      await loginLegacy(username, password);
-      navigate('/');
-    } catch (err) {
-      setError(parseLoginErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-  end LEGACY LOGIN */
-
   const reasonBanner = authReason ? REASON_MESSAGES[authReason] : null;
+  // If we don't recognize the reason code, we still want the user to know
+  // something went wrong rather than rendering a silent empty banner.
+  const fallbackBanner = authReason && !reasonBanner
+    ? "We couldn't complete sign-in. Please try again."
+    : null;
 
   return (
-    <div className="login-container">
-      <div className="login-shell">
-        <section className="login-visual" aria-hidden="true">
-          <img className="login-side-image" src={LOGIN_SIDE_IMAGE} alt="Survey analytics illustration" />
-        </section>
+    <div className="fmb-login-shell" role="main">
+      <section className="fmb-login-form-side">
+        <div className="fmb-login-card">
+          <header className="fmb-login-brandbar">
+            <img src={BRAND_LOGO} alt="" />
+            <div>
+              <div className="fmb-login-brandbar-name">FMB Survey Builder</div>
+              <div className="fmb-login-brandbar-sub">a ConveGenius product</div>
+            </div>
+          </header>
 
-        <section className="login-card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-            <h1>FMB Survey Builder</h1>
-            <img className="login-logo" src={BRAND_LOGO_URL} alt="SwiftChat logo" />
+          <div>
+            <div className="fmb-login-eyebrow">Sign in</div>
+            <h1 className="fmb-login-title">Welcome back.</h1>
+            <p className="fmb-login-sub">
+              Use your invited Google account to continue. Access is managed by your state coordinator.
+            </p>
           </div>
-          <h2>Sign in to continue</h2>
 
-          {reasonBanner && (
-            <div className="error-message" style={{ marginBottom: '1rem' }}>{reasonBanner}</div>
+          {(reasonBanner || fallbackBanner) && (
+            <div className="fmb-login-banner" role="alert" data-testid="login-auth-reason">
+              <WarnIcon />
+              <div>{reasonBanner || fallbackBanner}</div>
+            </div>
           )}
-          {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
+
+          {error && (
+            <div className="fmb-login-banner error" role="alert" data-testid="login-error">
+              <WarnIcon />
+              <div>{error}</div>
+            </div>
+          )}
 
           {isSupabaseConfigured ? (
             <button
               type="button"
-              className="btn btn-primary btn-full btn-cta"
-              style={{ marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}
+              className="fmb-login-google"
               onClick={handleGoogle}
               disabled={googleLoading}
+              aria-busy={googleLoading}
+              data-testid="login-google-button"
             >
               <GoogleIcon />
               {googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}
             </button>
           ) : (
-            <div className="error-message" style={{ marginBottom: '1rem' }}>
-              Google sign-in is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.
+            <div className="fmb-login-banner error" role="alert">
+              <WarnIcon />
+              <div>
+                Google sign-in is not configured. Set <code>REACT_APP_SUPABASE_URL</code> and{' '}
+                <code>REACT_APP_SUPABASE_ANON_KEY</code> and reload.
+              </div>
             </div>
           )}
 
-          {/* LEGACY LOGIN — username/password form removed.
-              Kept as reference in the commented blocks above. */}
+          <p className="fmb-login-help">Need access? Contact your state coordinator.</p>
 
-          <p className="login-built-for">Built for ConveGenius</p>
-        </section>
-      </div>
+          <div className="fmb-login-footer">Built for ConveGenius</div>
+        </div>
+      </section>
+
+      <aside className="fmb-login-brand-side" aria-hidden="true">
+        <div className="fmb-login-brand-top">
+          <span>FMB Program</span>
+          <span className="dot" />
+          <span>Internal use only</span>
+        </div>
+
+        <div className="fmb-login-brand-copy">
+          <h2 className="fmb-login-brand-headline">
+            Author one survey.<br />
+            <span className="accent">Reach ten languages.</span>
+          </h2>
+          <p className="fmb-login-brand-lede">
+            Build, translate and preview field surveys for FMB programs — with
+            schema-driven validation, branching logic, and Excel round-trips.
+          </p>
+        </div>
+
+        <div className="fmb-login-brand-tag">
+          <span>ConveGenius · Survey Builder</span>
+        </div>
+
+        {/* Decorative grid + radial glow — keeps the panel from feeling
+            flat. Pointer-events disabled so they don't block the form on
+            wider screens where the panel sits next to the card. */}
+        <svg className="fmb-login-brand-grid" width="100%" height="100%" aria-hidden="true">
+          <defs>
+            <pattern id="fmb-login-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M40 0H0v40" fill="none" stroke="white" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#fmb-login-grid)" />
+        </svg>
+        <div className="fmb-login-brand-glow" />
+      </aside>
     </div>
   );
 };

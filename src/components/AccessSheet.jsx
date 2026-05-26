@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { accessSheetAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import PageHeader from './ui/PageHeader';
+import Icon from './ui/Icon';
 
 const AccessSheet = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
@@ -87,58 +91,85 @@ const AccessSheet = () => {
       ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
       : '-';
 
+  const dumpDisabled = dumping || (isAdmin && !adminState.trim());
+  const downloadDisabled = downloading || noData || !latest || loadingMeta;
+
   return (
-    <div className="question-list-container">
+    <div className="fmb-as-page" data-testid="as-page">
+      <PageHeader
+        eyebrow="CONFIG"
+        title="Access sheet"
+        sub="Generate and download state-specific access sheets from designation data. Only the latest dump is stored per state."
+        actions={
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigate('/')}
+            data-testid="as-back"
+          >
+            <Icon name="chevronLeft" /> Back to Surveys
+          </button>
+        }
+      />
 
-      {/* ── Page Header ── */}
-      <div className="list-header">
-        <div>
-          <h2>Access Sheet</h2>
-          <p className="subtitle">Generate and download state-specific access sheets from designation data</p>
-        </div>
-      </div>
-
-      {/* ── Admin State Selector ── */}
+      {/* Admin state filter */}
       {isAdmin && (
-        <div className="access-sheet-state-row">
-          <div className="admin-form-card" style={{ padding: '1.25rem 1.5rem' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>State Code</label>
-              <div style={{ maxWidth: 280 }}>
-                <input
-                  type="text"
-                  value={adminState}
-                  onChange={e => setAdminState(e.target.value.toUpperCase())}
-                  placeholder="e.g., MH"
-                  maxLength={10}
-                />
-              </div>
-              <small>Required to dump or download a specific state's sheet</small>
+        <section className="fmb-as-section" aria-labelledby="as-filter-h" data-testid="as-admin-filter">
+          <header className="fmb-as-section-head">
+            <h3 id="as-filter-h" className="fmb-as-section-title">State filter</h3>
+            <p className="fmb-as-section-sub">Required to dump or download a specific state's sheet.</p>
+          </header>
+          <div className="fmb-as-filter-grid">
+            <div className="fmb-as-field">
+              <label htmlFor="as-admin-state" className="fmb-as-field-label">State Code</label>
+              <input
+                id="as-admin-state"
+                type="text"
+                className="fmb-as-field-input"
+                value={adminState}
+                onChange={e => setAdminState(e.target.value.toUpperCase())}
+                placeholder="e.g., MH"
+                maxLength={10}
+                data-testid="as-admin-state-input"
+              />
+              <p className="fmb-as-field-help">2–3 letter state code (uppercase).</p>
             </div>
           </div>
+        </section>
+      )}
+
+      {/* Inline error / success banners */}
+      {error && (
+        <div className="fmb-as-error-banner" role="alert" data-testid="as-error">{error}</div>
+      )}
+      {dumpSuccess && (
+        <div className="fmb-as-success-banner" role="status" data-testid="as-dump-success">
+          <Icon name="check" size={14} />
+          Access sheet dumped successfully.
         </div>
       )}
 
-      {/* ── Error ── */}
-      {error && <div className="error-message">{error}</div>}
-
-      {/* ── Success ── */}
-      {dumpSuccess && <div className="success-message">✓ Access sheet dumped successfully!</div>}
-
-      {/* ── Validation Issues ── */}
+      {/* Server-side validation issues (ACCESS_SHEET_VALIDATION_FAILED) */}
       {validationIssues && validationIssues.length > 0 && (
-        <div className="access-sheet-validation-card">
-          <div className="access-sheet-validation-header">
-            <h3>⚠ Validation Failed — Sheet was NOT saved</h3>
+        <section className="fmb-as-issues" role="alert" data-testid="as-issues">
+          <header className="fmb-as-issues-head">
+            <div>
+              <h3 className="fmb-as-issues-title">Validation failed — sheet was NOT saved</h3>
+              <p className="fmb-as-section-sub" style={{ marginTop: 4 }}>
+                Fix the underlying designation data and try again.
+              </p>
+            </div>
             <button
-              className="btn btn-secondary btn-sm btn-cta btn-icon-cancel"
+              type="button"
+              className="btn btn-secondary btn-sm"
               onClick={() => setValidationIssues(null)}
+              data-testid="as-issues-dismiss"
             >
               Dismiss
             </button>
-          </div>
-          <div className="errors-table-container" style={{ marginTop: '1rem' }}>
-            <table className="errors-table">
+          </header>
+          <div className="fmb-errors-table-wrap">
+            <table className="fmb-errors-table" data-testid="as-issues-table">
               <thead>
                 <tr>
                   <th>Row</th>
@@ -157,65 +188,94 @@ const AccessSheet = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* ── CTA Cards ── */}
-      <div className="access-sheet-cta-grid">
+      {/* Action card grid: Generate + Download */}
+      <div className="fmb-as-actions-grid">
 
         {/* Dump card */}
-        <div className="access-sheet-card">
-          <div className="access-sheet-card-icon">📋</div>
-          <h3>Dump New Access Sheet</h3>
-          <p>
+        <section className="fmb-as-card" aria-labelledby="as-generate-h" data-testid="as-generate-card">
+          <div className="fmb-as-card-icon" aria-hidden="true">
+            <Icon name="upload" size={18} />
+          </div>
+          <h3 id="as-generate-h" className="fmb-as-card-title">Generate fresh dump</h3>
+          <p className="fmb-as-card-desc">
             Generates a fresh XLSX from the current designations for{' '}
-            {effectiveState ? <strong>{effectiveState}</strong> : 'your state'}.{' '}
-            Overwrites any previously stored dump.
+            <strong>{effectiveState || 'your state'}</strong>. Overwrites any previously stored dump.
           </p>
-          <button
-            className="btn btn-primary btn-cta btn-icon-download"
-            onClick={handleDump}
-            disabled={dumping || (isAdmin && !adminState.trim())}
-          >
-            {dumping ? 'Generating…' : 'Dump New Sheet'}
-          </button>
-        </div>
+          <div className="fmb-as-card-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleDump}
+              disabled={dumpDisabled}
+              aria-busy={dumping}
+              data-testid="as-dump"
+            >
+              {dumping ? 'Generating…' : 'Generate new sheet'}
+            </button>
+          </div>
+        </section>
 
         {/* Download card */}
-        <div className="access-sheet-card">
-          <div className="access-sheet-card-icon">📥</div>
-          <h3>Download Last Dumped Sheet</h3>
+        <section className="fmb-as-card" aria-labelledby="as-download-h" data-testid="as-download-card">
+          <div className="fmb-as-card-icon accent" aria-hidden="true">
+            <Icon name="fileCheck" size={18} />
+          </div>
+          <h3 id="as-download-h" className="fmb-as-card-title">Download latest dump</h3>
           {loadingMeta ? (
-            <p>Loading…</p>
+            <div className="fmb-as-skel" style={{ height: 90 }} data-testid="as-meta-loading" />
           ) : noData || !latest ? (
-            <p>No dump exists yet for this state.</p>
-          ) : (
-            <div className="access-sheet-meta">
-              <p><strong>File:</strong> {latest.file_name}</p>
-              <p><strong>Dumped at:</strong> {fmtDate(latest.dumped_at)}</p>
-              <p><strong>Dumped by:</strong> {latest.dumped_by}</p>
-              {latest.summary?.designationCount !== undefined && (
-                <p><strong>Designations:</strong> {latest.summary.designationCount} rows</p>
-              )}
+            <div className="fmb-as-card-empty" data-testid="as-meta-empty">
+              No dump exists yet for{' '}
+              <strong>{effectiveState || 'this state'}</strong>. Generate one first.
             </div>
+          ) : (
+            <dl className="fmb-as-meta" data-testid="as-meta">
+              <dt>File</dt>
+              <dd className="mono">{latest.file_name}</dd>
+              <dt>Dumped at</dt>
+              <dd>{fmtDate(latest.dumped_at)}</dd>
+              <dt>Dumped by</dt>
+              <dd>{latest.dumped_by}</dd>
+              {latest.summary?.designationCount !== undefined && (
+                <>
+                  <dt>Rows</dt>
+                  <dd>{latest.summary.designationCount} designation(s)</dd>
+                </>
+              )}
+            </dl>
           )}
-          <button
-            className="btn btn-primary btn-cta btn-icon-download"
-            onClick={handleDownload}
-            disabled={downloading || noData || !latest || loadingMeta}
-          >
-            {downloading ? 'Downloading…' : 'Download Last Sheet'}
-          </button>
-        </div>
+          <div className="fmb-as-card-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleDownload}
+              disabled={downloadDisabled}
+              aria-busy={downloading}
+              data-testid="as-download"
+            >
+              {downloading ? 'Downloading…' : 'Download last sheet'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={loadMeta}
+              disabled={loadingMeta}
+              data-testid="as-refresh"
+            >
+              Refresh
+            </button>
+          </div>
+        </section>
       </div>
 
-      {/* ── Info Note ── */}
-      <div className="access-sheet-note">
+      <p className="fmb-as-note">
         <strong>Note:</strong> Only the latest dump is stored per state. Each new dump overwrites the
         previous one. The downloaded file contains one row per designation as a template for filling
         in user access data.
-      </div>
-
+      </p>
     </div>
   );
 };

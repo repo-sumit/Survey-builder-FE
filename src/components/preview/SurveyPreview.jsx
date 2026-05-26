@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { surveyAPI, questionAPI } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
-import PreviewNavigation from './PreviewNavigation';
 import QuestionRenderer from './QuestionRenderer';
+import PageHeader from '../ui/PageHeader';
+import Icon from '../ui/Icon';
+import Chip from '../ui/Chip';
 
 const DUMMY_USERS = {
   '1001': { name: 'Test User 1', designation: 'School Inspector' },
@@ -29,10 +30,46 @@ const SchoolIcon = () => (
   </svg>
 );
 
+/* ─── Status bar + mobile header rendered inside every PhoneFrame ──── */
+const PhoneStatusBar = () => (
+  <div className="fmb-sp-statusbar" aria-hidden="true">
+    <span>9:41</span>
+    <span className="fmb-sp-statusbar-right">
+      <span className="fmb-sp-statusbar-bars"><span /><span /><span /><span /></span>
+      <span className="fmb-sp-statusbar-batt" />
+    </span>
+  </div>
+);
+
+const PhoneFrame = ({ surveyName, surveySubtitle, compact = false, children }) => (
+  <div className="fmb-sp-phone" role="region" aria-label="Mobile preview frame" data-testid="sp-phone-frame">
+    <PhoneStatusBar />
+    <div className="fmb-sp-mobile-header">
+      <div className="fmb-sp-mobile-header-logo" aria-hidden="true">SC</div>
+      <div className="fmb-sp-mobile-header-text">
+        <span className="fmb-sp-mobile-header-title">{surveyName || 'FMB Survey'}</span>
+        {surveySubtitle && <span className="fmb-sp-mobile-header-sub">{surveySubtitle}</span>}
+      </div>
+    </div>
+    <div className={`fmb-sp-screen${compact ? ' compact' : ''}`} data-testid="sp-phone-screen">
+      {children}
+    </div>
+  </div>
+);
+
+const PHASE_LABELS = {
+  'user-login':     'User Login',
+  'user-verify':    'Verify Details',
+  'language-select':'Choose Language',
+  'udise-input':    'School UDISE',
+  'udise-verified': 'School Verified',
+  'survey':         'Survey',
+  'completed':      'Completed',
+};
+
 const SurveyPreview = () => {
   const { surveyId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   const [survey, setSurvey] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -254,37 +291,221 @@ const SurveyPreview = () => {
     }
   };
 
+  const backToQuestions = () => navigate(`/surveys/${surveyId}/questions`);
+
+  // ── Branded header used by every workspace render ───────────────────
+  const renderHeader = (overrides = {}) => (
+    <PageHeader
+      eyebrow={surveyId || undefined}
+      title="Survey Preview"
+      sub={overrides.sub || (survey?.surveyName ? `Walk through "${survey.surveyName}" exactly as a respondent will see it on mobile.` : 'Walk through the survey exactly as a respondent will see it on mobile.')}
+      actions={
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={backToQuestions}
+          data-testid="sp-back"
+        >
+          <Icon name="chevronLeft" /> Back to Questions
+        </button>
+      }
+    />
+  );
+
+  // ─── Loading state ─────────────────────────────────────────────────────
   if (loading) {
-    return <div className="loading">Loading preview...</div>;
+    return (
+      <div className="fmb-sp-page" data-testid="sp-loading">
+        {renderHeader({ sub: 'Loading the preview workspace…' })}
+        <div className="fmb-sp-shell">
+          <div className="fmb-sp-canvas">
+            <div className="fmb-sp-skel" style={{ width: 384, maxWidth: '100%', height: 640, borderRadius: 28 }} />
+          </div>
+          <div className="fmb-sp-skel" style={{ height: 320, borderRadius: 14 }} />
+        </div>
+      </div>
+    );
   }
 
+  // ─── Error state ──────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="error-container">
-        <div className="error-message">{error}</div>
-        <button className="btn btn-primary" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
-          Back to Questions
-        </button>
+      <div className="fmb-sp-page" data-testid="sp-error">
+        {renderHeader({ sub: "We couldn't load this survey's preview." })}
+        <div className="fmb-sp-error-banner" role="alert">
+          <span className="fmb-sp-error-banner-title">Error: </span>{error}
+        </div>
+        <div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={backToQuestions}>
+            Back to Questions
+          </button>
+        </div>
       </div>
     );
   }
 
+  // ─── Empty (no questions) state ───────────────────────────────────────
   if (!questions || questions.length === 0) {
     return (
-      <div className="empty-state">
-        <p>No questions available for preview</p>
-        <button className="btn btn-primary" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
-          Back to Questions
-        </button>
+      <div className="fmb-sp-page" data-testid="sp-empty">
+        {renderHeader({ sub: 'This survey has no questions yet — add some to preview the respondent flow.' })}
+        <div className="fmb-sp-empty">
+          <div className="fmb-sp-empty-title">No questions to preview</div>
+          <p>Add at least one question to this survey before previewing.</p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={backToQuestions}>
+            Back to Questions
+          </button>
+        </div>
       </div>
     );
   }
 
-  // ── Onboarding: User ID login ──────────────────────────────────────────────
-  if (phase === 'user-login') {
-    return (
-      <div className="preview-onboarding-page">
-        <ExitBar onExit={() => navigate(`/surveys/${surveyId}/questions`)} />
+  // ─── Common inspector subtree — derives only from current state ───────
+  const visibleCount = visibleQuestions.length;
+  const answeredCount = visibleQuestions.filter(isAnswered).length;
+  const surveyPhaseActive = phase === 'survey';
+  const completed = phase === 'completed';
+  const progressPct = visibleCount > 0
+    ? Math.round((surveyPhaseActive ? (currentQuestionIndex / Math.max(visibleCount - 1, 1)) : (completed ? 1 : 0)) * 100)
+    : 0;
+
+  const renderInspector = () => (
+    <aside className="fmb-sp-inspector" aria-label="Preview inspector" data-testid="sp-inspector">
+      <div className="fmb-sp-insp-section">
+        <span className="fmb-sp-insp-label">Phase</span>
+        <span className={`fmb-sp-phase-chip${completed ? ' accent' : ''}`} data-testid="sp-phase-chip">
+          {PHASE_LABELS[phase] || phase}
+        </span>
+      </div>
+
+      <hr className="fmb-sp-insp-divider" />
+
+      <div className="fmb-sp-insp-section">
+        <span className="fmb-sp-insp-label">Survey</span>
+        <div className="fmb-sp-insp-kv">
+          <span className="fmb-sp-insp-kv-label">Name</span>
+          <span className="fmb-sp-insp-kv-value">{survey?.surveyName || '—'}</span>
+        </div>
+        <div className="fmb-sp-insp-kv">
+          <span className="fmb-sp-insp-kv-label">ID</span>
+          <span className="fmb-sp-insp-kv-value mono">{survey?.surveyId || surveyId}</span>
+        </div>
+        <div className="fmb-sp-insp-kv">
+          <span className="fmb-sp-insp-kv-label">Languages</span>
+          <span className="fmb-sp-insp-tags">
+            {availableLanguages.map(l => (
+              <Chip key={l} variant={l === effectiveLanguage ? 'brand' : ''}>{l}</Chip>
+            ))}
+          </span>
+        </div>
+        <div className="fmb-sp-insp-kv">
+          <span className="fmb-sp-insp-kv-label">In school</span>
+          <span className="fmb-sp-insp-kv-value">{isSchoolSurvey ? 'Yes' : 'No'}</span>
+        </div>
+      </div>
+
+      {previewUser && (
+        <>
+          <hr className="fmb-sp-insp-divider" />
+          <div className="fmb-sp-insp-section" data-testid="sp-insp-respondent">
+            <span className="fmb-sp-insp-label">Respondent</span>
+            <div className="fmb-sp-insp-kv">
+              <span className="fmb-sp-insp-kv-label">User ID</span>
+              <span className="fmb-sp-insp-kv-value mono">{previewUser.userId}</span>
+            </div>
+            <div className="fmb-sp-insp-kv">
+              <span className="fmb-sp-insp-kv-label">Name</span>
+              <span className="fmb-sp-insp-kv-value">{previewUser.name}</span>
+            </div>
+            <div className="fmb-sp-insp-kv">
+              <span className="fmb-sp-insp-kv-label">Designation</span>
+              <span className="fmb-sp-insp-kv-value">{previewUser.designation}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {verifiedSchool && (
+        <>
+          <hr className="fmb-sp-insp-divider" />
+          <div className="fmb-sp-insp-section" data-testid="sp-insp-school">
+            <span className="fmb-sp-insp-label">School</span>
+            <div className="fmb-sp-insp-kv">
+              <span className="fmb-sp-insp-kv-label">UDISE</span>
+              <span className="fmb-sp-insp-kv-value mono">{verifiedSchool.udiseCode}</span>
+            </div>
+            <div className="fmb-sp-insp-kv">
+              <span className="fmb-sp-insp-kv-label">Name</span>
+              <span className="fmb-sp-insp-kv-value">{verifiedSchool.schoolName}</span>
+            </div>
+            <div className="fmb-sp-insp-kv">
+              <span className="fmb-sp-insp-kv-label">District</span>
+              <span className="fmb-sp-insp-kv-value">{verifiedSchool.district}, {verifiedSchool.state}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {(surveyPhaseActive || completed) && (
+        <>
+          <hr className="fmb-sp-insp-divider" />
+          <div className="fmb-sp-insp-section" data-testid="sp-insp-progress">
+            <span className="fmb-sp-insp-label">Progress</span>
+            <div className="fmb-sp-progress">
+              <div className="fmb-sp-progress-meta">
+                <span>
+                  {completed
+                    ? 'All done'
+                    : `Question ${Math.min(currentQuestionIndex + 1, visibleCount)} of ${visibleCount}`}
+                </span>
+                <span data-testid="sp-progress-answered">{answeredCount}/{visibleCount} answered</span>
+              </div>
+              <div className="fmb-sp-progress-track">
+                <div
+                  className="fmb-sp-progress-fill"
+                  style={{ width: `${completed ? 100 : progressPct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {surveyPhaseActive && visibleCount > 0 && (
+        <>
+          <hr className="fmb-sp-insp-divider" />
+          <div className="fmb-sp-insp-section" data-testid="sp-insp-navigator">
+            <span className="fmb-sp-insp-label">Jump to question</span>
+            <div className="fmb-sp-insp-chips" role="list">
+              {visibleQuestions.map((q, index) => {
+                const cls = index === currentQuestionIndex
+                  ? 'fmb-sp-insp-chip active'
+                  : isAnswered(q)
+                    ? 'fmb-sp-insp-chip answered'
+                    : 'fmb-sp-insp-chip';
+                return (
+                  <button
+                    key={q.questionId}
+                    type="button"
+                    className={cls}
+                    onClick={() => handleNavigate(index)}
+                    aria-current={index === currentQuestionIndex ? 'true' : undefined}
+                  >
+                    {q.questionId}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </aside>
+  );
+
+  // ─── Per-phase canvas content (inside the phone frame) ────────────────
+  const renderPhoneContent = () => {
+    if (phase === 'user-login') {
+      return (
         <form className="preview-onboarding-card" onSubmit={handleUserIdSubmit}>
           <div className="preview-onboarding-avatar"><UserAvatarIcon /></div>
           <h2 className="preview-onboarding-title">FMB Demo Preview</h2>
@@ -310,15 +531,11 @@ const SurveyPreview = () => {
           </div>
           <button type="submit" className="btn btn-primary preview-onboarding-cta">Continue</button>
         </form>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Onboarding: Verify Your Details ────────────────────────────────────────
-  if (phase === 'user-verify' && previewUser) {
-    return (
-      <div className="preview-onboarding-page">
-        <ExitBar onExit={() => navigate(`/surveys/${surveyId}/questions`)} />
+    if (phase === 'user-verify' && previewUser) {
+      return (
         <div className="preview-onboarding-card">
           <div className="preview-onboarding-avatar"><UserAvatarIcon /></div>
           <h2 className="preview-onboarding-title">Verify Your Details</h2>
@@ -338,24 +555,12 @@ const SurveyPreview = () => {
             Go Back
           </button>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Onboarding: Language Selection (modal) ─────────────────────────────────
-  if (phase === 'language-select') {
-    return (
-      <div className="preview-onboarding-page preview-onboarding-faded">
-        <ExitBar onExit={() => navigate(`/surveys/${surveyId}/questions`)} />
-        <div className="preview-modal-backdrop" />
-        <div className="preview-modal" role="dialog" aria-modal="true">
-          <button
-            className="preview-modal-close"
-            onClick={() => navigate(`/surveys/${surveyId}/questions`)}
-            aria-label="Close"
-          >
-            ×
-          </button>
+    if (phase === 'language-select') {
+      return (
+        <div className="preview-modal" role="dialog" aria-modal="false">
           <h3 className="preview-modal-title">Choose your preferred language</h3>
           <p className="preview-modal-desc">Select the language in which you want to fill the survey.</p>
           <div className="preview-onboarding-field">
@@ -378,15 +583,11 @@ const SurveyPreview = () => {
             Continue
           </button>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Onboarding: UDISE Code input ───────────────────────────────────────────
-  if (phase === 'udise-input') {
-    return (
-      <div className="preview-onboarding-page">
-        <ExitBar onExit={() => navigate(`/surveys/${surveyId}/questions`)} />
+    if (phase === 'udise-input') {
+      return (
         <form className="preview-onboarding-card preview-onboarding-card-school" onSubmit={handleUdiseSubmit}>
           <div className="preview-onboarding-avatar preview-onboarding-avatar-school"><SchoolIcon /></div>
           <h2 className="preview-onboarding-title">Enter School UDISE Code</h2>
@@ -418,15 +619,11 @@ const SurveyPreview = () => {
             Contact your school administration or district education office.
           </p>
         </form>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Onboarding: UDISE Verified card ────────────────────────────────────────
-  if (phase === 'udise-verified' && verifiedSchool) {
-    return (
-      <div className="preview-onboarding-page">
-        <ExitBar onExit={() => navigate(`/surveys/${surveyId}/questions`)} />
+    if (phase === 'udise-verified' && verifiedSchool) {
+      return (
         <div className="preview-school-verified">
           <div className="preview-school-verified-header">
             <span className="preview-school-verified-check">✓</span>
@@ -460,15 +657,12 @@ const SurveyPreview = () => {
             Enter Another / Go Back
           </button>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Survey completed screen ────────────────────────────────────────────────
-  if (phase === 'completed') {
-    return (
-      <div className="preview-completed-page">
-        <div className="preview-completed-card">
+    if (phase === 'completed') {
+      return (
+        <div className="preview-completed-card" data-testid="sp-completed-card">
           <div className="preview-completed-checkmark">✓</div>
           <h2 className="preview-completed-title">Survey Completed</h2>
           <p className="preview-completed-desc">
@@ -477,7 +671,7 @@ const SurveyPreview = () => {
           <div className="preview-completed-actions">
             <button
               className="btn btn-primary"
-              onClick={() => navigate(`/surveys/${surveyId}/questions`)}
+              onClick={backToQuestions}
             >
               Go to Question Master
             </button>
@@ -497,76 +691,15 @@ const SurveyPreview = () => {
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  // ── Main survey screen ─────────────────────────────────────────────────────
-  const currentQuestion = visibleQuestions[currentQuestionIndex];
-
-  const handleExitPreview = () => {
-    navigate(`/surveys/${surveyId}/questions`);
-  };
-
-  return (
-    <div className="survey-preview-container">
-      {/* Exit bar */}
-      <div className="preview-exit-bar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-        <button
-          className="btn btn-secondary preview-exit-btn"
-          onClick={handleExitPreview}
-          title="Exit preview and return to Question Master"
-        >
-          ← Exit Preview
-        </button>
-      </div>
-
-      {/* Survey Info Header */}
-      <div className="preview-info-header">
-        <div className="preview-info-cell">
-          <span className="preview-info-label">Survey Name</span>
-          <span className="preview-info-value">{survey?.surveyName}</span>
-        </div>
-        <div className="preview-info-cell">
-          <span className="preview-info-label">Survey ID</span>
-          <span className="preview-info-value">{survey?.surveyId || surveyId}</span>
-        </div>
-        <div className="preview-info-cell">
-          <span className="preview-info-label">User ID</span>
-          <span className="preview-info-value">{previewUser?.userId || user?.username || user?.email || '-'}</span>
-        </div>
-        <div className="preview-info-cell">
-          <span className="preview-info-label">Employee Name</span>
-          <span className="preview-info-value">{previewUser?.name || user?.name || user?.username || user?.email || '-'}</span>
-        </div>
-        {previewUser?.designation && (
-          <div className="preview-info-cell">
-            <span className="preview-info-label">Designation</span>
-            <span className="preview-info-value">{previewUser.designation}</span>
-          </div>
-        )}
-        {verifiedSchool && (
-          <div className="preview-info-cell">
-            <span className="preview-info-label">UDISE Code</span>
-            <span className="preview-info-value">{verifiedSchool.udiseCode}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Navigation */}
-      <PreviewNavigation
-        currentQuestion={currentQuestionIndex}
-        totalQuestions={visibleQuestions.length}
-        onNavigate={handleNavigate}
-        questions={visibleQuestions}
-        answeredQuestions={answers}
-        isAnswered={isAnswered}
-      />
-
-      {/* Question Content */}
-      <div className="preview-content">
+    // phase === 'survey'
+    const currentQuestion = visibleQuestions[currentQuestionIndex];
+    return (
+      <>
         {validationError && (
-          <div className="error-message" style={{ marginBottom: '1rem' }}>
+          <div className="fmb-sp-validation" role="alert" data-testid="sp-validation">
             {validationError}
           </div>
         )}
@@ -579,6 +712,7 @@ const SurveyPreview = () => {
         />
         <div className="preview-cta">
           <button
+            type="button"
             className="preview-prev-link"
             onClick={() => {
               if (currentQuestionIndex > 0) {
@@ -591,27 +725,39 @@ const SurveyPreview = () => {
             Previous
           </button>
           <button
+            type="button"
             className="btn btn-primary preview-save-continue-btn"
             onClick={handleSubmitCurrent}
+            data-testid="sp-save-continue"
           >
             {currentQuestionIndex < visibleQuestions.length - 1 ? 'Save and Continue' : 'Submit Survey'}
           </button>
         </div>
+      </>
+    );
+  };
+
+  const surveySubtitle = previewUser
+    ? `${previewUser.name} · ${previewUser.designation}`
+    : (effectiveLanguage !== 'English' ? effectiveLanguage : null);
+
+  return (
+    <div className="fmb-sp-page" data-testid="sp-page">
+      {renderHeader()}
+      <div className="fmb-sp-shell">
+        <div className="fmb-sp-canvas">
+          <PhoneFrame
+            surveyName={survey?.surveyName || 'FMB Survey'}
+            surveySubtitle={surveySubtitle}
+            compact={phase === 'survey'}
+          >
+            {renderPhoneContent()}
+          </PhoneFrame>
+        </div>
+        {renderInspector()}
       </div>
     </div>
   );
 };
-
-const ExitBar = ({ onExit }) => (
-  <div className="preview-exit-bar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-    <button
-      className="btn btn-secondary preview-exit-btn"
-      onClick={onExit}
-      title="Exit preview and return to Question Master"
-    >
-      ← Exit Preview
-    </button>
-  </div>
-);
 
 export default SurveyPreview;

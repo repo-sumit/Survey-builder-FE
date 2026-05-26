@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
@@ -9,7 +9,12 @@ import PublicOnlyRoute from './components/PublicOnlyRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLoader from './components/AppLoader';
 import Login from './components/Login';
-import Navigation from './components/Navigation';
+import AccessDenied from './components/AccessDenied';
+import Sidebar from './components/ui/Sidebar';
+import TopNav from './components/ui/TopNav';
+import TweaksPanel from './components/ui/TweaksPanel';
+import CommandPalette from './components/ui/CommandPalette';
+import useTweaks from './hooks/useTweaks';
 import { authAPI } from './services/api';
 import './App.css';
 import './swiftchatRedesign.css';
@@ -133,9 +138,74 @@ const CustomCursor = () => {
   );
 };
 
+/**
+ * AppShell — composes the new fmb-* sidebar/topnav with the existing
+ * legacy `.app` + `.main-content` containers. Keeping both classes
+ * means App.css's flex layout and per-screen styling still apply,
+ * while the @media collapse rule in ui.css can target this container
+ * via `.fmb-app-shell[data-nav]`.
+ *
+ * The Tweaks panel and command palette are owned here (not inside the
+ * sidebar) so they remain accessible regardless of which nav variant
+ * is selected, and so ⌘K works app-wide.
+ */
+function AppShell({ children }) {
+  const [tweaks, setTweak, resetTweaks] = useTweaks();
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K toggle for the command palette. Intentionally
+  // ignored when an editable input/textarea is focused so the user can
+  // still type "k" without hijacking it.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key && e.key.toLowerCase() === 'k') {
+        const t = e.target;
+        const isEditable =
+          t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+        if (!isEditable) {
+          e.preventDefault();
+          setCmdOpen((v) => !v);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const isTop = tweaks.nav === 'top';
+
+  return (
+    <div
+      className={isTop ? 'fmb-app-shell' : 'app fmb-app-shell'}
+      data-nav={isTop ? 'top' : 'side'}
+    >
+      {isTop
+        ? <TopNav  onSearchOpen={() => setCmdOpen(true)} onTweaksOpen={() => setTweaksOpen(true)} />
+        : <Sidebar onSearchOpen={() => setCmdOpen(true)} onTweaksOpen={() => setTweaksOpen(true)} />}
+
+      <main className="main-content fmb-main-pane">
+        {children}
+      </main>
+
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+      <TweaksPanel
+        open={tweaksOpen}
+        onClose={() => setTweaksOpen(false)}
+        values={tweaks}
+        setTweak={setTweak}
+        onReset={resetTweaks}
+      />
+    </div>
+  );
+}
+
 function App() {
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'light');
+    // Note: useTweaks now drives [data-theme] / [data-accent] / [data-font]
+    // and the body density class. We leave data-bs-theme + the legacy
+    // localStorage('theme') write in place because the existing App.css
+    // and Bootstrap-derived styling read them.
     document.documentElement.setAttribute('data-bs-theme', 'light');
     localStorage.setItem('theme', 'light');
     // Pre-warm the (possibly cold) Render backend so that the first authed
@@ -161,49 +231,55 @@ function App() {
               }
             />
 
+            {/*
+              Access-denied is a free route — it must render with or
+              without an auth session (someone may deep-link to it after
+              an admin tells them their request is pending). The component
+              itself reads useAuth() and redirects authorized users home
+              so they can't get stuck here.
+            */}
+            <Route path="/access-denied" element={<AccessDenied />} />
+
             {/* All other routes are protected */}
             <Route
               path="/*"
               element={
                 <ProtectedRoute>
-                  <div className="app">
-                    <Navigation />
-                    <main className="main-content">
-                      <ErrorBoundary>
-                      <Suspense fallback={<PageLoader />}>
-                      <Routes>
-                        {/* State-user-only routes — admin is redirected to /admin */}
-                        <Route path="/" element={<StateOnlyRoute><SurveyList /></StateOnlyRoute>} />
-                        <Route path="/surveys/new" element={<StateOnlyRoute><SurveyForm /></StateOnlyRoute>} />
-                        <Route path="/surveys/:surveyId/edit" element={<StateOnlyRoute><SurveyForm /></StateOnlyRoute>} />
-                        <Route path="/surveys/:surveyId/questions" element={<StateOnlyRoute><QuestionList /></StateOnlyRoute>} />
-                        <Route path="/surveys/:surveyId/questions/new" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
-                        <Route path="/surveys/:surveyId/questions/:questionId/edit" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
-                        <Route path="/surveys/:surveyId/preview" element={<StateOnlyRoute><SurveyPreview /></StateOnlyRoute>} />
-                        <Route path="/import" element={<StateOnlyRoute><ImportSurvey /></StateOnlyRoute>} />
-                        <Route path="/validator" element={<StateOnlyRoute><DumpsheetValidator /></StateOnlyRoute>} />
-                        <Route path="/designations" element={<StateOnlyRoute><DesignationMapping /></StateOnlyRoute>} />
-                        <Route path="/access-sheet" element={<StateOnlyRoute><AccessSheet /></StateOnlyRoute>} />
+                  <AppShell>
+                    <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                    <Routes>
+                      {/* State-user-only routes — admin is redirected to /admin */}
+                      <Route path="/" element={<StateOnlyRoute><SurveyList /></StateOnlyRoute>} />
+                      <Route path="/surveys/new" element={<StateOnlyRoute><SurveyForm /></StateOnlyRoute>} />
+                      <Route path="/surveys/:surveyId/edit" element={<StateOnlyRoute><SurveyForm /></StateOnlyRoute>} />
+                      <Route path="/surveys/:surveyId/questions" element={<StateOnlyRoute><QuestionList /></StateOnlyRoute>} />
+                      <Route path="/surveys/:surveyId/questions/new" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
+                      <Route path="/surveys/:surveyId/questions/:questionId/edit" element={<StateOnlyRoute><QuestionForm /></StateOnlyRoute>} />
+                      <Route path="/surveys/:surveyId/preview" element={<StateOnlyRoute><SurveyPreview /></StateOnlyRoute>} />
+                      <Route path="/import" element={<StateOnlyRoute><ImportSurvey /></StateOnlyRoute>} />
+                      <Route path="/validator" element={<StateOnlyRoute><DumpsheetValidator /></StateOnlyRoute>} />
+                      <Route path="/designations" element={<StateOnlyRoute><DesignationMapping /></StateOnlyRoute>} />
+                      <Route path="/access-sheet" element={<StateOnlyRoute><AccessSheet /></StateOnlyRoute>} />
 
-                        {/* Admin-only route */}
-                        <Route
-                          path="/admin"
-                          element={
-                            <ProtectedRoute requiredRole="admin">
-                              <AdminPanel />
-                            </ProtectedRoute>
-                          }
-                        />
+                      {/* Admin-only route */}
+                      <Route
+                        path="/admin"
+                        element={
+                          <ProtectedRoute requiredRole="admin">
+                            <AdminPanel />
+                          </ProtectedRoute>
+                        }
+                      />
 
-                        {/* Unknown protected paths — deterministic fallback.
-                            Admins land on /admin, state users on /. Avoids the
-                            "blank page on typo'd URL" failure mode. */}
-                        <Route path="*" element={<StateOnlyRoute><Navigate to="/" replace /></StateOnlyRoute>} />
-                      </Routes>
-                      </Suspense>
-                      </ErrorBoundary>
-                    </main>
-                  </div>
+                      {/* Unknown protected paths — deterministic fallback.
+                          Admins land on /admin, state users on /. Avoids the
+                          "blank page on typo'd URL" failure mode. */}
+                      <Route path="*" element={<StateOnlyRoute><Navigate to="/" replace /></StateOnlyRoute>} />
+                    </Routes>
+                    </Suspense>
+                    </ErrorBoundary>
+                  </AppShell>
                 </ProtectedRoute>
               }
             />

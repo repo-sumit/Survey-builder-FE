@@ -1,0 +1,4203 @@
+/* ============================================================
+   FMB UI primitives (Phase 2-3)
+
+   All classes are prefixed with `fmb-` to guarantee they cannot
+   collide with App.css's legacy class system (.btn, .badge,
+   .empty-state, .stat-card, .navigation, etc.). Legacy screens
+   continue to use App.css; new shell + primitives use the rules
+   below. When a legacy screen is later redesigned, swap its
+   markup to use the fmb-* classes.
+   ============================================================ */
+
+/* ── App shell layout ─────────────────────────────────────────── */
+.fmb-app-shell {
+  display: grid;
+  grid-template-columns: var(--ui-nav-w) 1fr;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg);
+}
+.fmb-app-shell[data-nav="top"] {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+.fmb-main-pane { min-width: 0; overflow-x: hidden; }
+.fmb-main-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--s-7) var(--s-7) 120px;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+.fmb-sidebar {
+  background: var(--surface-2);
+  border-right: 1px solid var(--border, #e6e3da);
+  display: flex;
+  flex-direction: column;
+  padding: var(--s-5) var(--s-3) var(--s-3);
+  gap: var(--s-2);
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.fmb-sidebar-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px 18px;
+  text-decoration: none;
+  color: inherit;
+}
+.fmb-sidebar-brand img { width: 28px; height: 28px; object-fit: contain; }
+.fmb-sidebar-brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.fmb-sidebar-brand-sub {
+  font-size: 11px;
+  color: var(--text-3, #6b6b73);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.fmb-nav-section { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; }
+.fmb-nav-section-title {
+  font-size: 10.5px;
+  color: var(--text-4, #9b9aa1);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 8px 12px 4px;
+  font-weight: 600;
+}
+.fmb-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-2);
+  font-size: 13.5px;
+  color: var(--text-2, #3b3b41);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background .12s, color .12s;
+  border: none; background: transparent; text-align: left;
+  position: relative;
+  width: 100%;
+  text-decoration: none;
+  font-family: inherit;
+}
+.fmb-nav-item:hover { background: var(--surface-3); color: var(--text); }
+.fmb-nav-item[aria-current="page"] {
+  background: var(--surface, #fff);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+.fmb-nav-item[aria-current="page"]::before {
+  content: ''; position: absolute; left: -10px; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 2px; background: var(--brand);
+}
+.fmb-nav-item .fmb-icon { width: 16px; height: 16px; flex: 0 0 16px; color: var(--text-3, #6b6b73); }
+.fmb-nav-item[aria-current="page"] .fmb-icon { color: var(--brand); }
+.fmb-nav-item .fmb-nav-badge {
+  margin-left: auto;
+  font-size: 11px;
+  background: var(--surface-3);
+  color: var(--text-3, #6b6b73);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.fmb-sidebar-spacer { flex: 1; }
+.fmb-sidebar-user {
+  border-top: 1px solid var(--border, #e6e3da);
+  padding: 12px 8px 4px;
+  display: flex; align-items: center; gap: 10px;
+}
+.fmb-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--brand); color: white;
+  display: grid; place-items: center;
+  font-weight: 600; font-size: 12px;
+  flex-shrink: 0;
+}
+.fmb-avatar.sm { width: 22px; height: 22px; font-size: 10px; }
+.fmb-avatar.lg { width: 40px; height: 40px; font-size: 14px; }
+.fmb-sidebar-user-meta { font-size: 12.5px; line-height: 1.2; min-width: 0; flex: 1; }
+.fmb-sidebar-user-meta .fmb-user-name {
+  font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12.5px;
+}
+.fmb-sidebar-user-meta .fmb-user-role { font-size: 11px; color: var(--text-3, #6b6b73); }
+
+/* ── TopNav alt ──────────────────────────────────────────────── */
+.fmb-topnav {
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e6e3da);
+  display: flex; align-items: center;
+  padding: 0 var(--s-6);
+  height: 56px;
+  gap: var(--s-6);
+}
+.fmb-topnav .fmb-sidebar-brand { padding: 0; gap: 8px; }
+.fmb-topnav-links { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.fmb-topnav-links .fmb-nav-item { padding: 6px 12px; border-radius: 8px; width: auto; }
+.fmb-topnav-links .fmb-nav-item[aria-current="page"] { background: var(--surface-2); box-shadow: none; }
+.fmb-topnav-links .fmb-nav-item[aria-current="page"]::before { display: none; }
+.fmb-topnav-spacer { flex: 1; }
+
+/* ── Page header ─────────────────────────────────────────────── */
+.fmb-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-6);
+  padding-bottom: var(--s-5);
+  border-bottom: 1px solid var(--border, #e6e3da);
+}
+.fmb-page-header.no-border { border-bottom: none; padding-bottom: 0; }
+.fmb-page-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.15;
+}
+.fmb-page-sub { color: var(--text-3, #6b6b73); font-size: 14px; margin: 4px 0 0; }
+.fmb-eyebrow {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-breadcrumbs {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  margin-bottom: 8px;
+}
+.fmb-breadcrumbs .fmb-icon { width: 11px; height: 11px; }
+.fmb-breadcrumbs button {
+  background: none; border: none; padding: 0; color: inherit;
+  font: inherit; cursor: pointer;
+}
+.fmb-breadcrumbs button:hover { color: var(--text); }
+.fmb-breadcrumbs .fmb-bc-current { color: var(--text); }
+
+/* ── Badge pill ──────────────────────────────────────────────── */
+.fmb-badge-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  border: 1px solid transparent;
+  font-family: var(--font-sans, system-ui);
+  white-space: nowrap;
+}
+.fmb-badge-pill.draft   { background: var(--surface-3); color: var(--text-2, #3b3b41); }
+.fmb-badge-pill.live    { background: var(--ok-soft);   color: var(--ok, #2f7a4f); }
+.fmb-badge-pill.review  { background: var(--warn-soft); color: var(--warn, #b8770a); }
+.fmb-badge-pill.locked  { background: var(--danger-soft); color: var(--danger, #c1442f); }
+.fmb-badge-pill.brand   { background: var(--brand-soft); color: var(--brand-ink); }
+.fmb-badge-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* ── Chip ────────────────────────────────────────────────────── */
+.fmb-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: var(--surface-2);
+  color: var(--text-2, #3b3b41);
+  font-weight: 500;
+  border: 1px solid var(--border, #e6e3da);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.fmb-chip.brand  { background: var(--brand-soft); color: var(--brand-ink); border-color: transparent; }
+.fmb-chip.accent { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+
+/* ── Segmented ───────────────────────────────────────────────── */
+.fmb-segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.fmb-segmented button {
+  background: transparent;
+  border: none;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit;
+}
+.fmb-segmented button[aria-pressed="true"] {
+  background: var(--surface, #fff);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+.fmb-segmented .fmb-icon { width: 13px; height: 13px; }
+
+/* ── Icon button ─────────────────────────────────────────────── */
+.fmb-icon-btn {
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  display: inline-grid; place-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-3, #6b6b73);
+  transition: background .1s, color .1s;
+}
+.fmb-icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.fmb-icon-btn .fmb-icon { width: 15px; height: 15px; }
+
+/* ── Form helpers ────────────────────────────────────────────── */
+.fmb-checkbox {
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface, #fff);
+  display: inline-grid; place-items: center;
+  cursor: pointer;
+  flex: 0 0 16px;
+  transition: background .12s, border-color .12s;
+}
+.fmb-checkbox[data-checked="true"] { background: var(--brand); border-color: var(--brand); }
+.fmb-checkbox[data-checked="true"]::after {
+  content: ''; width: 9px; height: 9px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9'><path d='M1.5 4.5l2 2 4-4' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+.fmb-radio {
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  display: inline-grid; place-items: center;
+  cursor: pointer;
+  flex: 0 0 18px;
+  transition: border-color .12s;
+}
+.fmb-radio[data-checked="true"] { border-color: var(--brand); }
+.fmb-radio[data-checked="true"]::after {
+  content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--brand);
+}
+.fmb-toggle {
+  width: 32px; height: 18px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--border, #e6e3da);
+  position: relative;
+  cursor: pointer;
+  transition: background .15s;
+  flex: 0 0 32px;
+  display: inline-block;
+}
+.fmb-toggle::after {
+  content: ''; position: absolute; top: 1px; left: 1px;
+  width: 14px; height: 14px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  transition: transform .15s;
+}
+.fmb-toggle[data-on="true"] { background: var(--brand); border-color: var(--brand); }
+.fmb-toggle[data-on="true"]::after { transform: translateX(14px); }
+
+/* ── Modal (scrim + dialog) ──────────────────────────────────── */
+.fmb-scrim {
+  position: fixed; inset: 0;
+  background: rgba(15, 15, 20, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1100;
+  display: grid; place-items: center;
+  padding: 40px;
+  animation: fmb-fade .15s ease-out;
+}
+@keyframes fmb-fade { from { opacity: 0; } }
+.fmb-modal {
+  background: var(--surface, #fff);
+  border-radius: var(--r-5);
+  border: 1px solid var(--border, #e6e3da);
+  box-shadow: var(--shadow-3);
+  width: min(560px, 100%);
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  animation: fmb-pop .2s cubic-bezier(.2,.7,.2,1);
+}
+@keyframes fmb-pop { from { opacity: 0; transform: scale(0.97) translateY(6px); } }
+.fmb-modal-head { padding: 22px 24px 8px; }
+.fmb-modal-head h3 { font-size: 18px; font-weight: 600; margin: 0; color: var(--text); font-family: var(--font-display); }
+.fmb-modal-head p { font-size: 13.5px; color: var(--text-3, #6b6b73); margin: 4px 0 0; }
+.fmb-modal-body { padding: 12px 24px; display: flex; flex-direction: column; gap: 16px; }
+.fmb-modal-foot {
+  padding: 16px 24px 22px;
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid var(--border, #e6e3da);
+  margin-top: 16px;
+  background: var(--surface-2);
+  border-radius: 0 0 var(--r-5) var(--r-5);
+}
+
+/* ── Search box ──────────────────────────────────────────────── */
+.fmb-search-box {
+  position: relative;
+  flex: 1;
+  max-width: 360px;
+}
+.fmb-search-box .fmb-icon {
+  position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 14px;
+  color: var(--text-4, #9b9aa1);
+  pointer-events: none;
+}
+.fmb-search-box input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px 0 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  background: var(--surface, #fff);
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+.fmb-search-box input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.fmb-search-box .fmb-kbd {
+  position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--text-4, #9b9aa1);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ── Command palette ─────────────────────────────────────────── */
+.fmb-cmdk {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: 4px;
+}
+.fmb-cmdk-input {
+  width: 100%; border: none; background: transparent;
+  padding: 12px 14px;
+  font-size: 14.5px;
+  color: var(--text);
+  font-family: inherit;
+}
+.fmb-cmdk-input:focus { outline: none; }
+.fmb-cmdk-item {
+  padding: 8px 12px;
+  display: flex; align-items: center; gap: 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+}
+.fmb-cmdk-item:hover, .fmb-cmdk-item[aria-selected="true"] { background: var(--surface-2); }
+.fmb-cmdk-item .fmb-icon { width: 15px; height: 15px; color: var(--text-3, #6b6b73); }
+.fmb-cmdk-section {
+  font-size: 11px;
+  color: var(--text-3, #6b6b73);
+  padding: 8px 12px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* ── Tweaks panel (namespaced) ───────────────────────────────── */
+.fmb-tweaks-toggle {
+  position: fixed; right: 18px; bottom: 18px;
+  z-index: 1080;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2, #3b3b41);
+  display: grid; place-items: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+  transition: transform .1s, box-shadow .12s;
+}
+.fmb-tweaks-toggle:hover { transform: translateY(-1px); box-shadow: var(--shadow-3); }
+.fmb-tweaks-panel {
+  position: fixed; right: 18px; bottom: 68px;
+  z-index: 1090;
+  width: 300px;
+  max-height: calc(100vh - 96px);
+  display: flex; flex-direction: column;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-4);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-sans, system-ui);
+  overflow: hidden;
+  animation: fmb-pop .15s cubic-bezier(.2,.7,.2,1);
+}
+.fmb-tweaks-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+}
+.fmb-tweaks-panel-head h4 {
+  font-size: 13px; font-weight: 600; margin: 0; color: var(--text);
+  font-family: var(--font-display);
+}
+.fmb-tweaks-panel-body { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.fmb-tweaks-section { display: flex; flex-direction: column; gap: 8px; }
+.fmb-tweaks-section-title {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-3, #6b6b73);
+}
+.fmb-tweaks-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.fmb-tweaks-row label {
+  font-size: 12.5px; color: var(--text-2, #3b3b41); font-weight: 500;
+}
+.fmb-tweaks-select {
+  flex: 1; max-width: 60%;
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.fmb-tweaks-segment {
+  display: inline-flex;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.fmb-tweaks-segment button {
+  background: transparent;
+  border: none;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.fmb-tweaks-segment button[aria-pressed="true"] {
+  background: var(--surface, #fff);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+
+/* ============================================================
+   Question List (Phase 7)
+
+   Single-column layout — stat strip + translation-coverage strip +
+   toolbar + ordered rows. All classes prefixed fmb-ql-* so they
+   never collide with App.css's existing .question-* rules.
+   ============================================================ */
+
+/* Banners — lock + read-only context */
+.fmb-ql-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--r-3);
+  font-size: 13px;
+  margin-bottom: var(--s-4);
+}
+.fmb-ql-banner.warn { background: var(--warn-soft); color: var(--warn, #b8770a); }
+.fmb-ql-banner.info { background: var(--brand-soft); color: var(--brand-ink); }
+.fmb-ql-banner .fmb-icon { flex-shrink: 0; margin-top: 1px; }
+
+/* Stat strip (derived metrics only) */
+.fmb-ql-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-4);
+  margin-bottom: var(--s-5);
+}
+.fmb-ql-stat {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-3);
+  padding: 14px 16px;
+}
+.fmb-ql-stat-label {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-ql-stat-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+  line-height: 1.1;
+  color: var(--text);
+}
+.fmb-ql-stat-hint {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  margin-top: 4px;
+}
+
+/* Translation-coverage strip */
+.fmb-ql-coverage {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-3);
+  padding: 14px 18px;
+  margin-bottom: var(--s-5);
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+}
+.fmb-ql-coverage-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fmb-ql-coverage-eyebrow {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-ql-coverage-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.fmb-ql-coverage-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.fmb-ql-coverage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid transparent;
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-ql-coverage-chip[data-state="done"]    { background: var(--ok-soft);     color: var(--ok,    #2f7a4f); }
+.fmb-ql-coverage-chip[data-state="partial"] { background: var(--warn-soft);   color: var(--warn,  #b8770a); }
+.fmb-ql-coverage-chip[data-state="empty"]   { background: var(--surface-2);   color: var(--text-4, #9b9aa1); }
+.fmb-ql-coverage-chip .ratio {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+}
+
+/* Toolbar */
+.fmb-ql-toolbar {
+  display: flex;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.fmb-ql-toolbar .fmb-search-box { max-width: 360px; flex: 1; }
+.fmb-ql-toolbar .fmb-ql-spacer { flex: 1; min-width: 1px; }
+.fmb-ql-toolbar-summary {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  white-space: nowrap;
+}
+
+/* Row list */
+.fmb-ql-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.fmb-ql-row {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--s-4) var(--s-5);
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: var(--s-4);
+  align-items: start;
+  transition: border-color .15s, box-shadow .15s;
+  margin-left: calc(var(--question-depth, 0) * 28px);
+}
+.fmb-ql-row:hover { border-color: var(--border-strong); box-shadow: var(--shadow-1); }
+.fmb-ql-row.child-question {
+  border-left: 3px solid var(--accent);
+}
+.fmb-ql-row .fmb-ql-row-no {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+  border-radius: 8px;
+  padding: 4px 6px;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  height: fit-content;
+  min-width: 48px;
+}
+
+.fmb-ql-row-body { min-width: 0; }
+.fmb-ql-row-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.fmb-ql-row-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.fmb-ql-row-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.45;
+  margin: 0 0 6px;
+  word-break: break-word;
+}
+.fmb-ql-row-english {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  margin: 0 0 8px;
+  font-style: italic;
+}
+.fmb-ql-row-options {
+  font-size: 12.5px;
+  color: var(--text-2, #3b3b41);
+  background: var(--surface-2);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fmb-ql-row-options strong {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-ql-row-options-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fmb-ql-option-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+.fmb-ql-option-pill .arrow {
+  color: var(--text-4, #9b9aa1);
+  font-size: 10.5px;
+}
+.fmb-ql-row-table {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  background: var(--surface-2);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  margin: 6px 0 0;
+}
+.fmb-ql-row-table pre {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-ql-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11.5px;
+}
+
+/* Empty / error / skeleton states */
+.fmb-ql-empty {
+  background: var(--surface, #fff);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--r-4);
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.fmb-ql-empty-icon {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: grid; place-items: center;
+}
+.fmb-ql-empty-title {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 16px;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-ql-empty-sub {
+  font-size: 13.5px; color: var(--text-3, #6b6b73);
+  max-width: 360px;
+  margin: 0;
+}
+
+.fmb-ql-error {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border-radius: var(--r-3);
+  margin-bottom: var(--s-4);
+  font-size: 13.5px;
+}
+.fmb-ql-error-msg { flex: 1; }
+
+.fmb-ql-skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-ql-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@keyframes fmb-ql-shimmer { to { background-position: -200% 0; } }
+
+/* Re-use the existing .question-highlight class App.css already
+   styles for scroll-restore. We keep the same selector so the existing
+   keyframes / box-shadow lights up the targeted row in the new layout. */
+.fmb-ql-row.question-highlight {
+  box-shadow: 0 0 0 3px var(--brand-soft);
+  transition: box-shadow .3s ease;
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .fmb-ql-row { grid-template-columns: 1fr; }
+  .fmb-ql-row .fmb-ql-row-no { width: fit-content; }
+  .fmb-ql-row-actions { width: 100%; }
+  .fmb-ql-row-actions .btn { flex: 1; justify-content: center; }
+  .fmb-ql-toolbar .fmb-search-box { max-width: 100%; width: 100%; }
+  .fmb-ql-coverage-list { justify-content: flex-start; }
+}
+
+/* ============================================================
+   Survey Form (Phase 6)
+
+   Two-column shell on desktop (form left, summary right). Stacks to
+   one column at ≤ 960px. All classes prefixed fmb-sf-* so they don't
+   touch App.css's existing .form-* / .survey-form rules.
+   ============================================================ */
+.fmb-sf-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s-6);
+  align-items: start;
+}
+@media (min-width: 960px) {
+  .fmb-sf-shell {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+.fmb-sf-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.fmb-sf-section {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.fmb-sf-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-1);
+}
+.fmb-sf-section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-sf-section-sub {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.fmb-sf-grid {
+  display: grid;
+  gap: var(--s-4);
+  grid-template-columns: 1fr;
+}
+.fmb-sf-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.fmb-sf-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.fmb-sf-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+@media (max-width: 720px) {
+  .fmb-sf-grid.cols-2,
+  .fmb-sf-grid.cols-3,
+  .fmb-sf-grid.cols-4 { grid-template-columns: 1fr; }
+}
+
+.fmb-sf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fmb-sf-field-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2, #3b3b41);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fmb-sf-field-required {
+  color: var(--danger, #c1442f);
+  font-weight: 600;
+}
+.fmb-sf-field-input,
+.fmb-sf-field-textarea,
+.fmb-sf-field-select {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-sf-field-input:focus,
+.fmb-sf-field-textarea:focus,
+.fmb-sf-field-select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-sf-field-input:disabled,
+.fmb-sf-field-textarea:disabled,
+.fmb-sf-field-select:disabled {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  cursor: not-allowed;
+}
+.fmb-sf-field-input[aria-invalid="true"],
+.fmb-sf-field-textarea[aria-invalid="true"],
+.fmb-sf-field-select[aria-invalid="true"] {
+  border-color: var(--danger, #c1442f);
+}
+.fmb-sf-field-textarea {
+  resize: vertical;
+  min-height: 88px;
+  font-family: inherit;
+}
+.fmb-sf-field-select {
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 5l3 3 3-3' fill='none' stroke='%236b6b73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.fmb-sf-field-help {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  margin: 0;
+}
+.fmb-sf-field-error {
+  font-size: 12px;
+  color: var(--danger, #c1442f);
+  font-weight: 500;
+}
+.fmb-sf-mono { font-family: var(--font-mono, ui-monospace, monospace); }
+
+/* Top-level error summary banner */
+.fmb-sf-error-banner {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid transparent;
+  border-radius: var(--r-3);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.fmb-sf-error-banner-title { font-weight: 600; }
+.fmb-sf-error-banner ul { margin: 0; padding-left: 18px; }
+
+/* Multi-select dropdown — replaces legacy .medium-dropdown */
+.fmb-sf-multiselect {
+  position: relative;
+}
+.fmb-sf-multiselect-trigger {
+  width: 100%;
+  text-align: left;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text-2, #3b3b41);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fmb-sf-multiselect-trigger:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-sf-multiselect-trigger[data-invalid="true"] { border-color: var(--danger, #c1442f); }
+.fmb-sf-multiselect-trigger .fmb-icon { color: var(--text-3, #6b6b73); flex-shrink: 0; }
+.fmb-sf-multiselect-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-2);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 20;
+}
+.fmb-sf-multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  cursor: pointer;
+  color: var(--text);
+}
+.fmb-sf-multiselect-option:hover { background: var(--surface-2); }
+.fmb-sf-multiselect-option[aria-selected="true"] {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+.fmb-sf-multiselect-option-empty {
+  color: var(--text-3, #6b6b73);
+  font-style: italic;
+  cursor: default;
+}
+.fmb-sf-multiselect-option .check {
+  margin-left: auto;
+  color: var(--brand);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Tag chips — picks for languages / hierarchy levels */
+.fmb-sf-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fmb-sf-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.fmb-sf-tag.locked { background: var(--surface-2); color: var(--text-3, #6b6b73); }
+.fmb-sf-tag-remove {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.fmb-sf-tag-remove:hover { background: rgba(0, 0, 0, 0.08); }
+
+/* DatePicker wrapper override — keeps react-datepicker but inherits brand tokens. */
+.fmb-sf-datepicker { width: 100%; }
+.fmb-sf-datepicker .react-datepicker-wrapper { width: 100%; }
+.fmb-sf-datepicker .react-datepicker__input-container input {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-sf-datepicker .react-datepicker__input-container input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-sf-datepicker.has-error .react-datepicker__input-container input { border-color: var(--danger, #c1442f); }
+
+/* Skeleton placeholder during edit-mode fetch */
+.fmb-sf-skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-sf-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@keyframes fmb-sf-shimmer { to { background-position: -200% 0; } }
+
+/* Summary side card */
+.fmb-sf-summary {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--s-5);
+  position: sticky;
+  top: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+@media (max-width: 960px) {
+  .fmb-sf-summary { position: static; }
+}
+.fmb-sf-summary-eyebrow {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-sf-summary-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  line-height: 1.3;
+  word-break: break-word;
+}
+.fmb-sf-summary-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-sf-summary-desc {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+.fmb-sf-summary-divider {
+  border: none;
+  border-top: 1px solid var(--border, #e6e3da);
+  margin: 6px 0;
+}
+.fmb-sf-summary-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+.fmb-sf-summary-kv-label { color: var(--text-3, #6b6b73); }
+.fmb-sf-summary-kv-value { color: var(--text); font-weight: 500; text-align: right; max-width: 60%; }
+.fmb-sf-summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+  max-width: 60%;
+}
+.fmb-sf-summary-tags .fmb-chip { padding: 1px 7px; font-size: 11px; border-radius: 5px; }
+
+/* Submit action bar */
+.fmb-sf-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border, #e6e3da);
+}
+.fmb-sf-actions .btn { font-family: inherit; }
+@media (max-width: 640px) {
+  .fmb-sf-actions { flex-direction: column-reverse; align-items: stretch; }
+  .fmb-sf-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ============================================================
+   Access Denied screen (Phase 5.5)
+
+   Standalone branded "not authorized" landing — mounted at
+   /access-denied as a top-level route (no ProtectedRoute / no
+   PublicOnlyRoute wrapping). The component itself decides what
+   to render based on useAuth(). These classes are additive and
+   prefixed `fmb-access-` so nothing else can override them.
+   ============================================================ */
+.fmb-access-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  background:
+    radial-gradient(circle at 20% 18%, var(--brand-soft) 0%, transparent 45%),
+    radial-gradient(circle at 80% 82%, var(--accent-soft) 0%, transparent 45%),
+    var(--bg);
+  font-family: var(--font-sans, system-ui);
+  color: var(--text);
+}
+
+.fmb-access-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  box-shadow: var(--shadow-2);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.fmb-access-brandbar {
+  display: flex; align-items: center; gap: 12px;
+}
+.fmb-access-brandbar img { width: 36px; height: 36px; object-fit: contain; }
+.fmb-access-brandbar .fmb-access-brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: var(--text);
+}
+.fmb-access-brandbar .fmb-access-brand-sub {
+  font-size: 11px;
+  color: var(--text-3, #6b6b73);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.fmb-access-icon {
+  width: 64px; height: 64px;
+  border-radius: 18px;
+  background: var(--warn-soft);
+  color: var(--warn, #b8770a);
+  display: grid; place-items: center;
+  margin-top: 4px;
+}
+
+.fmb-access-eyebrow {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+
+.fmb-access-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.18;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin: 4px 0 0;
+}
+
+.fmb-access-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2, #3b3b41);
+  margin: 0;
+}
+
+.fmb-access-body .fmb-access-strong { color: var(--text); font-weight: 600; }
+
+/* Admin-contacts panel */
+.fmb-access-contacts {
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-3);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fmb-access-contacts-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-access-contacts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.fmb-access-contact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 999px;
+  padding: 5px 12px 5px 5px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.fmb-access-contact .fmb-avatar {
+  width: 24px; height: 24px;
+  font-size: 11px;
+}
+
+/* Actions */
+.fmb-access-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.fmb-access-actions .btn { font-family: inherit; }
+.fmb-access-actions .fmb-access-spacer { flex: 1; }
+
+.fmb-access-footer {
+  font-size: 11px;
+  color: var(--text-4, #9b9aa1);
+  text-align: center;
+  margin: 8px 0 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Mobile — same card, just full width with tighter padding */
+@media (max-width: 520px) {
+  .fmb-access-shell { padding: 24px 16px; }
+  .fmb-access-card { padding: 24px; gap: 14px; }
+  .fmb-access-title { font-size: 22px; }
+  .fmb-access-actions { flex-direction: column; align-items: stretch; }
+  .fmb-access-actions .btn { width: 100%; justify-content: center; }
+  .fmb-access-actions .fmb-access-spacer { display: none; }
+}
+
+/* Dark-theme adjustments — the radial backdrop uses brand-soft + accent-soft
+   which already invert via tokens.css's dark block, so no overrides needed. */
+:root[data-theme="dark"] .fmb-access-card {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+:root[data-theme="dark"] .fmb-access-contact { background: var(--surface-3); border-color: transparent; }
+
+/* ============================================================
+   Survey List (Phase 5)
+
+   Visual building blocks for the new Survey List screen. All
+   classes prefixed `fmb-sl-` so they cannot collide with App.css.
+   The existing legacy `.survey-grid` / `.survey-card` classes
+   continue to exist and style the previous list if any other
+   screen still mounts it (none do today).
+   ============================================================ */
+
+/* Stats strip — derived metrics only, no fakes */
+.fmb-sl-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s-4);
+  margin-bottom: var(--s-6);
+}
+.fmb-sl-stat {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-3);
+  padding: 16px 18px;
+}
+.fmb-sl-stat-label {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.fmb-sl-stat-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+  line-height: 1.1;
+  color: var(--text);
+}
+.fmb-sl-stat-hint {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  margin-top: 4px;
+}
+
+/* Toolbar — search + filters + sort */
+.fmb-sl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-5);
+  flex-wrap: wrap;
+}
+.fmb-sl-toolbar .fmb-search-box { max-width: 320px; }
+.fmb-sl-toolbar .fmb-sl-spacer { flex: 1; min-width: 1px; }
+.fmb-sl-sort {
+  height: 34px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  background: var(--surface, #fff);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 5l3 3 3-3' fill='none' stroke='%236b6b73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+.fmb-sl-sort:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+
+/* Card grid */
+.fmb-sl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s-4);
+}
+
+.fmb-sl-card {
+  position: relative;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-height: 220px;
+  overflow: hidden;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.fmb-sl-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-2); }
+.fmb-sl-card-accent {
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand), var(--accent));
+  opacity: 0.6;
+  pointer-events: none;
+}
+.fmb-sl-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 4px;
+}
+.fmb-sl-card-meta-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.fmb-sl-card-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.fmb-sl-card-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-sl-card-desc {
+  font-size: 13px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+/* Card action row — buttons reuse the existing App.css .btn family so
+   primary/secondary/danger styling lands without us re-skinning all of
+   App.css. The wrapper handles wrap + alignment. */
+.fmb-sl-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--border, #e6e3da);
+}
+
+/* Empty state */
+.fmb-sl-empty {
+  background: var(--surface, #fff);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--r-4);
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.fmb-sl-empty-icon {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: grid; place-items: center;
+  margin-bottom: 4px;
+}
+.fmb-sl-empty-title {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 16px;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-sl-empty-sub {
+  font-size: 13.5px; color: var(--text-3, #6b6b73);
+  max-width: 360px;
+  margin: 0;
+}
+
+/* Error banner with retry */
+.fmb-sl-error {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px;
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border-radius: var(--r-3);
+  margin-bottom: var(--s-4);
+  font-size: 13.5px;
+}
+.fmb-sl-error .fmb-sl-error-msg { flex: 1; }
+
+/* Skeleton (re-use App.css's .skeleton if present, but provide a
+   tokenized fallback so the loading state is never empty.) */
+.fmb-sl-skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-sl-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@keyframes fmb-sl-shimmer { to { background-position: -200% 0; } }
+.fmb-sl-skeleton-card {
+  min-height: 220px;
+  border: 1px solid var(--border, #e6e3da);
+}
+
+/* Read-only banner */
+.fmb-sl-readonly {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--r-3);
+  background: var(--warn-soft);
+  color: var(--warn, #b8770a);
+  font-size: 13px;
+  margin-bottom: var(--s-4);
+}
+
+/* Mobile — keep search full-width, stack toolbar */
+@media (max-width: 640px) {
+  .fmb-sl-toolbar { gap: var(--s-2); }
+  .fmb-sl-toolbar .fmb-search-box { max-width: 100%; width: 100%; }
+  .fmb-sl-toolbar .fmb-sl-spacer { display: none; }
+  .fmb-sl-card-actions { flex-direction: column; align-items: stretch; }
+  .fmb-sl-card-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ============================================================
+   Login screen (Phase 4)
+
+   Two-column at >=960px (form left, brand panel right), stacked
+   on smaller viewports with just the form. No App.css `.login-*`
+   classes referenced — those continue to style the legacy login
+   on environments that haven't picked up this redesign.
+   ============================================================ */
+.fmb-login-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--bg);
+  font-family: var(--font-sans, system-ui);
+  color: var(--text);
+}
+@media (min-width: 960px) {
+  .fmb-login-shell {
+    grid-template-columns: minmax(440px, 1fr) 1fr;
+  }
+}
+
+.fmb-login-form-side {
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+}
+@media (min-width: 960px) {
+  .fmb-login-form-side { padding: 48px 56px; }
+}
+
+.fmb-login-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: 32px;
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 960px) {
+  /* On desktop, the brand panel handles atmosphere; keep the
+     card minimal so it reads as a focused form, not a marketing block. */
+  .fmb-login-card {
+    border: 1px solid var(--border, #e6e3da);
+    box-shadow: var(--shadow-1);
+  }
+}
+
+.fmb-login-brandbar {
+  display: flex; align-items: center; gap: 12px;
+}
+.fmb-login-brandbar img { width: 40px; height: 40px; object-fit: contain; }
+.fmb-login-brandbar .fmb-login-brandbar-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  line-height: 1.1;
+}
+.fmb-login-brandbar .fmb-login-brandbar-sub {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.fmb-login-eyebrow {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-login-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin: 4px 0 4px;
+  line-height: 1.15;
+}
+.fmb-login-sub {
+  font-size: 14px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.fmb-login-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  background: var(--warn-soft);
+  border-radius: var(--r-3);
+  color: var(--warn, #b8770a);
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid transparent;
+}
+.fmb-login-banner.error {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+}
+.fmb-login-banner .fmb-icon { margin-top: 1px; flex-shrink: 0; }
+
+.fmb-login-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: var(--r-3);
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid var(--brand);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .12s, transform .04s, box-shadow .12s;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.16);
+}
+.fmb-login-google:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); }
+.fmb-login-google:active:not(:disabled) { transform: translateY(1px); }
+.fmb-login-google:disabled { opacity: 0.65; cursor: not-allowed; }
+.fmb-login-google:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.fmb-login-help {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  text-align: center;
+  margin: 4px 0 0;
+}
+
+.fmb-login-footer {
+  font-size: 11px;
+  color: var(--text-4, #9b9aa1);
+  text-align: center;
+  margin: 12px 0 0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Brand panel (desktop only) ──────────────────────────────── */
+.fmb-login-brand-side {
+  display: none;
+}
+@media (min-width: 960px) {
+  .fmb-login-brand-side {
+    position: relative;
+    background: var(--brand);
+    color: #fff;
+    overflow: hidden;
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+}
+.fmb-login-brand-top {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; opacity: 0.85;
+}
+.fmb-login-brand-top .dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: currentColor; opacity: 0.6;
+}
+.fmb-login-brand-copy {
+  position: relative; z-index: 2;
+  max-width: 480px;
+}
+.fmb-login-brand-headline {
+  font-family: var(--font-display);
+  font-size: 44px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  margin: 0 0 18px;
+}
+.fmb-login-brand-headline .accent { color: var(--accent); }
+.fmb-login-brand-lede {
+  font-size: 15px;
+  opacity: 0.85;
+  line-height: 1.55;
+  margin: 0;
+}
+.fmb-login-brand-grid {
+  position: absolute; inset: 0;
+  opacity: 0.07;
+  pointer-events: none;
+}
+.fmb-login-brand-glow {
+  position: absolute;
+  right: -100px; bottom: -120px;
+  width: 480px; height: 480px; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  opacity: 0.28;
+  pointer-events: none;
+}
+.fmb-login-brand-tag {
+  position: relative; z-index: 2;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px;
+  opacity: 0.78;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* ── Dark-mode tweaks for the login card ─────────────────────── */
+:root[data-theme="dark"] .fmb-login-card {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+/* ── Responsive — sidebar collapses at 1000px (icon-only rail) */
+@media (max-width: 1000px) {
+  .fmb-app-shell:not([data-nav="top"]) { --ui-nav-w: 64px; }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-sidebar-brand-name,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-sidebar-brand-sub,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item > span:not(.fmb-icon),
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-sidebar-user-meta,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-section-title,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-search-box,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item .fmb-nav-badge {
+    display: none;
+  }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-brand { justify-content: center; padding: 6px 0 18px; }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item { justify-content: center; padding: 8px; }
+  .fmb-main-inner { padding: var(--s-6) var(--s-5) 80px; }
+}
+
+/* ============================================================
+   Question Form (Phase 8B)
+
+   Two-column shell on desktop (form left, live preview right).
+   Stacks to one column at ≤ 960px. All classes prefixed fmb-qf-*
+   so they don't touch App.css's legacy .form-* / .question-form
+   rules — the inner Options/Table/Translation row markup is left
+   alone in 8B (those are 8C/8D scope) and continues to render
+   under the legacy classes inside the new section cards.
+   ============================================================ */
+.fmb-qf-page { display: block; }
+
+.fmb-qf-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s-6);
+  align-items: start;
+}
+@media (min-width: 960px) {
+  .fmb-qf-shell {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+.fmb-qf-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+.fmb-qf-section {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.fmb-qf-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-1);
+}
+.fmb-qf-section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-qf-section-sub {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.fmb-qf-grid {
+  display: grid;
+  gap: var(--s-4);
+  grid-template-columns: 1fr;
+}
+.fmb-qf-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.fmb-qf-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.fmb-qf-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+@media (max-width: 720px) {
+  .fmb-qf-grid.cols-2,
+  .fmb-qf-grid.cols-3,
+  .fmb-qf-grid.cols-4 { grid-template-columns: 1fr; }
+}
+
+.fmb-qf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fmb-qf-field-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2, #3b3b41);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fmb-qf-field-required {
+  color: var(--danger, #c1442f);
+  font-weight: 600;
+}
+.fmb-qf-field-input,
+.fmb-qf-field-textarea,
+.fmb-qf-field-select {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-qf-field-input:focus,
+.fmb-qf-field-textarea:focus,
+.fmb-qf-field-select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-qf-field-input:disabled,
+.fmb-qf-field-textarea:disabled,
+.fmb-qf-field-select:disabled {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  cursor: not-allowed;
+}
+.fmb-qf-field-input[aria-invalid="true"],
+.fmb-qf-field-textarea[aria-invalid="true"],
+.fmb-qf-field-select[aria-invalid="true"] {
+  border-color: var(--danger, #c1442f);
+}
+.fmb-qf-field-textarea {
+  resize: vertical;
+  min-height: 88px;
+  font-family: inherit;
+}
+.fmb-qf-field-select {
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 5l3 3 3-3' fill='none' stroke='%236b6b73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.fmb-qf-field-help {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  margin: 0;
+}
+.fmb-qf-field-error {
+  font-size: 12px;
+  color: var(--danger, #c1442f);
+  font-weight: 500;
+}
+.fmb-qf-mono { font-family: var(--font-mono, ui-monospace, monospace); }
+
+/* Survey-languages hint above Question Description */
+.fmb-qf-lang-hint {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  line-height: 1.5;
+}
+.fmb-qf-lang-hint strong { color: var(--text-2, #3b3b41); }
+
+/* Parent-mandatory lock note */
+.fmb-qf-lock-note {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  margin: 0;
+}
+
+/* Top-level error banners — submit error + cross-field summary */
+.fmb-qf-error-banner {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid transparent;
+  border-radius: var(--r-3);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: var(--s-4);
+}
+.fmb-qf-error-banner-title { font-weight: 600; }
+.fmb-qf-error-banner ul { margin: 0; padding-left: 18px; }
+
+/* Skeleton — branded loading state for the form shell */
+.fmb-qf-skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-qf-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@keyframes fmb-qf-shimmer { to { background-position: -200% 0; } }
+
+/* Respect the user's motion preference — pause the shimmer when
+   prefers-reduced-motion is on. The static surface tint is still
+   distinct enough to read as a placeholder. */
+@media (prefers-reduced-motion: reduce) {
+  .fmb-qf-skel { animation: none; background: var(--surface-2); }
+}
+
+/* Submit action bar — bottom of the main column */
+.fmb-qf-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border, #e6e3da);
+}
+.fmb-qf-actions .btn { font-family: inherit; }
+@media (max-width: 640px) {
+  .fmb-qf-actions { flex-direction: column-reverse; align-items: stretch; }
+  .fmb-qf-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Live Preview panel (right-side aside, sticky on desktop) ── */
+.fmb-qf-summary {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--s-5);
+  position: sticky;
+  top: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+@media (max-width: 960px) {
+  .fmb-qf-summary { position: static; }
+}
+.fmb-qf-summary-eyebrow {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-qf-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fmb-qf-summary-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.fmb-qf-summary-id.placeholder { color: var(--text-3, #6b6b73); font-weight: 500; }
+
+.fmb-qf-summary-question {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+  margin: 0;
+}
+.fmb-qf-summary-question.placeholder { color: var(--text-3, #6b6b73); font-weight: 500; font-style: italic; }
+.fmb-qf-summary-desc {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+.fmb-qf-summary-divider {
+  border: none;
+  border-top: 1px solid var(--border, #e6e3da);
+  margin: 6px 0;
+}
+.fmb-qf-summary-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+.fmb-qf-summary-kv-label { color: var(--text-3, #6b6b73); }
+.fmb-qf-summary-kv-value { color: var(--text); font-weight: 500; text-align: right; max-width: 60%; }
+.fmb-qf-summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+  max-width: 60%;
+}
+.fmb-qf-summary-tags .fmb-chip { padding: 1px 7px; font-size: 11px; border-radius: 5px; }
+
+/* ============================================================
+   Question Form — Options / Table rows (Phase 8C)
+
+   Card-styled row layout, replacing the legacy .options-table-row
+   markup inside the Options and Table sections. Behavior is
+   unchanged: handlers, payload shape, validation, and the Phase 8A
+   testid contract (qf-option-row, qf-table-row, data-index) are
+   preserved. Translations card markup is intentionally untouched
+   here (Phase 8D scope).
+   ============================================================ */
+
+/* List + toolbar containers */
+.fmb-qf-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.fmb-qf-rows-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.fmb-qf-rows-meta {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+}
+
+/* Empty-state placeholder shown when rows are empty so the user
+   sees the section is interactive. */
+.fmb-qf-rows-empty {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-3);
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  font-size: 12.5px;
+  padding: var(--s-4) var(--s-5);
+  text-align: center;
+}
+
+/* Column legend strip — sits above the row list. Holds the static
+   "Option text" / "Child Questions" labels that the lock-in tests
+   query, and gives the user a visible mapping to the inputs below. */
+.fmb-qf-row-legend {
+  display: grid;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 600;
+}
+.fmb-qf-row-legend.with-children {
+  grid-template-columns: 28px minmax(0, 1.4fr) minmax(0, 1fr) 36px;
+}
+.fmb-qf-row-legend.text-only {
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+}
+.fmb-qf-row-legend.tableq {
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+}
+.fmb-qf-row-legend > * { min-width: 0; }
+.fmb-qf-row-legend-spacer { /* empty cell — keeps grid columns aligned */ }
+@media (max-width: 720px) {
+  .fmb-qf-row-legend { display: none; }
+}
+
+/* Row card itself */
+.fmb-qf-row {
+  display: grid;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-3);
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-qf-row.with-children {
+  grid-template-columns: 28px minmax(0, 1.4fr) minmax(0, 1fr) 36px;
+}
+.fmb-qf-row.text-only,
+.fmb-qf-row.tableq {
+  grid-template-columns: 28px minmax(0, 1fr) 36px;
+}
+.fmb-qf-row:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+@media (max-width: 720px) {
+  .fmb-qf-row.with-children,
+  .fmb-qf-row.text-only,
+  .fmb-qf-row.tableq {
+    grid-template-columns: 1fr;
+    gap: var(--s-2);
+  }
+}
+
+/* Number / letter badge on the left */
+.fmb-qf-row-num {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.fmb-qf-row-num.disabled { background: var(--surface-2); color: var(--text-3, #6b6b73); }
+
+/* Inputs inside the row card */
+.fmb-qf-row-input {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+  min-width: 0;
+}
+.fmb-qf-row-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-qf-row-input.is-mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
+.fmb-qf-row-input[aria-invalid="true"] { border-color: var(--danger, #c1442f); }
+
+/* Mobile inline labels — shown only when the row collapses to a
+   single column, so each input still has a visible scope. */
+.fmb-qf-row-inline-label {
+  display: none;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3, #6b6b73);
+  margin-bottom: 2px;
+}
+@media (max-width: 720px) {
+  .fmb-qf-row-inline-label { display: block; }
+  .fmb-qf-row-field { display: flex; flex-direction: column; }
+}
+
+/* Remove button — icon-styled with explicit aria-label="Remove" so
+   the lock-in tests' `getByRole('button', { name: /^Remove$/ })`
+   query still resolves. */
+.fmb-qf-row-remove {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  background: var(--surface, #fff);
+  color: var(--text-3, #6b6b73);
+  cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+  padding: 0;
+}
+.fmb-qf-row-remove:hover:not(:disabled) {
+  color: var(--danger, #c1442f);
+  border-color: var(--danger, #c1442f);
+  background: var(--danger-soft);
+}
+.fmb-qf-row-remove:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-qf-row-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+@media (max-width: 720px) {
+  .fmb-qf-row-remove {
+    width: 100%;
+    height: 36px;
+    border-radius: var(--r-2);
+  }
+  .fmb-qf-row-remove .fmb-qf-row-remove-text { display: inline; }
+}
+.fmb-qf-row-remove-text { display: none; }
+
+/* Table-headers pair — sits above the table-questions list */
+.fmb-qf-table-headers {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 720px) {
+  .fmb-qf-table-headers { grid-template-columns: 1fr; }
+}
+.fmb-qf-table-headers-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fmb-qf-table-headers-cell-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3, #6b6b73);
+  font-weight: 600;
+}
+
+/* ============================================================
+   Question Form — Translations section (Phase 8D)
+
+   Per-language card with header (language name + native script +
+   completion badge), helper sub-text, description textarea, and
+   inline source-on-left / translation-on-right rows for options
+   and table-questions. Reuses .fmb-qf-row + .fmb-qf-row-num
+   tokens from Phase 8C so the visual rhythm matches.
+   ============================================================ */
+.fmb-qf-trans-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-3);
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+.fmb-qf-trans-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  padding-bottom: var(--s-3);
+}
+.fmb-qf-trans-head-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.fmb-qf-trans-lang {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.fmb-qf-trans-script {
+  font-size: 13px;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-qf-trans-sub {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  margin: 0;
+  width: 100%;
+  line-height: 1.5;
+}
+
+/* Completion badge — derived only from current langTranslations state */
+.fmb-qf-trans-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  border: 1px solid var(--border, #e6e3da);
+  white-space: nowrap;
+}
+.fmb-qf-trans-progress.complete {
+  background: var(--ok-soft);
+  color: #2c6c4f;
+  border-color: rgba(44, 108, 79, 0.25);
+}
+.fmb-qf-trans-progress.empty {
+  background: var(--warn-soft);
+  color: #8a5a06;
+  border-color: rgba(138, 90, 6, 0.25);
+}
+
+.fmb-qf-trans-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* Source preview on the left side of a translation row — read-only */
+.fmb-qf-trans-source {
+  font-size: 13px;
+  color: var(--text-2, #3b3b41);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.fmb-qf-trans-source em {
+  color: var(--text-3, #6b6b73);
+  font-style: italic;
+}
+
+/* Row variant for translations: badge | source preview | translation input */
+.fmb-qf-row.trans {
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr);
+}
+.fmb-qf-row-legend.trans {
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr);
+}
+@media (max-width: 720px) {
+  .fmb-qf-row.trans { grid-template-columns: 1fr; }
+}
+
+/* Empty / placeholder source text — when the English option/row hasn't
+   been filled yet but the translation slot still renders. */
+.fmb-qf-trans-source.placeholder { color: var(--text-3, #6b6b73); font-style: italic; }
+
+/* ============================================================
+   Survey Preview (Phase 9)
+
+   Two-column workspace: centered phone-frame canvas + sticky
+   right-side inspector. Each preview phase (user-login, user-verify,
+   language-select, udise-input, udise-verified, survey, completed)
+   still renders the legacy preview-onboarding-card / .preview-* /
+   .question-renderer markup INSIDE the phone frame — only the
+   surrounding chrome is redesigned. Functional state machine,
+   handlers, renderers, and API calls are untouched.
+   ============================================================ */
+.fmb-sp-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.fmb-sp-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s-6);
+  align-items: start;
+}
+@media (min-width: 980px) {
+  .fmb-sp-shell {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+/* Canvas column — centers the phone frame */
+.fmb-sp-canvas {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--s-6) var(--s-5);
+  min-height: 600px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(127, 200, 190, 0.10), transparent 38%),
+    radial-gradient(circle at 88% 82%, rgba(75, 74, 147, 0.07),  transparent 42%),
+    var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+}
+@media (max-width: 720px) {
+  .fmb-sp-canvas { padding: var(--s-4) var(--s-3); }
+}
+
+/* The phone frame itself — locked aspect ratio on desktop, fluid on phone */
+.fmb-sp-phone {
+  width: 384px;
+  max-width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 28px;
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 640px;
+}
+@media (max-width: 720px) {
+  .fmb-sp-phone {
+    width: 100%;
+    border-radius: 18px;
+    min-height: 560px;
+  }
+}
+
+/* iOS-style status bar */
+.fmb-sp-statusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 18px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-2, #3b3b41);
+}
+.fmb-sp-statusbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fmb-sp-statusbar-bars {
+  display: inline-flex;
+  gap: 2px;
+}
+.fmb-sp-statusbar-bars span {
+  display: inline-block;
+  width: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.fmb-sp-statusbar-bars span:nth-child(1) { height: 4px; }
+.fmb-sp-statusbar-bars span:nth-child(2) { height: 6px; }
+.fmb-sp-statusbar-bars span:nth-child(3) { height: 8px; }
+.fmb-sp-statusbar-bars span:nth-child(4) { height: 10px; }
+.fmb-sp-statusbar-batt {
+  width: 22px; height: 11px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  position: relative;
+}
+.fmb-sp-statusbar-batt::after {
+  content: '';
+  position: absolute;
+  right: -3px; top: 3px;
+  width: 2px; height: 5px;
+  background: currentColor;
+  border-radius: 0 1px 1px 0;
+}
+.fmb-sp-statusbar-batt::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+/* Branded mobile header — SwiftChat-style */
+.fmb-sp-mobile-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  background: var(--surface, #fff);
+}
+.fmb-sp-mobile-header-logo {
+  width: 26px; height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+}
+.fmb-sp-mobile-header-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+.fmb-sp-mobile-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.fmb-sp-mobile-header-sub {
+  font-size: 10.5px;
+  color: var(--text-3, #6b6b73);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+/* The actual phone content area — scrollable */
+.fmb-sp-screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-4);
+  background: var(--bg, #faf9f6);
+  min-height: 0;
+}
+.fmb-sp-screen.compact { padding: var(--s-3); }
+
+/* Strip the legacy onboarding chrome when rendered inside the phone
+   frame — the frame already provides its own card surface. */
+.fmb-sp-screen .preview-onboarding-page { padding: 0; min-height: 0; }
+.fmb-sp-screen .preview-onboarding-card,
+.fmb-sp-screen .preview-school-verified {
+  margin: 0 auto;
+  box-shadow: none;
+  max-width: 100%;
+}
+.fmb-sp-screen .preview-onboarding-faded { background: transparent; }
+.fmb-sp-screen .preview-exit-bar { display: none; }
+.fmb-sp-screen .preview-modal-backdrop { display: none; }
+.fmb-sp-screen .preview-modal {
+  position: static;
+  transform: none;
+  box-shadow: none;
+  width: 100%;
+  max-width: 100%;
+}
+.fmb-sp-screen .preview-modal-close { display: none; }
+.fmb-sp-screen .question-renderer { margin-bottom: var(--s-4); }
+.fmb-sp-screen .preview-cta { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+
+/* ── Right-side inspector ───────────────────────────────────── */
+.fmb-sp-inspector {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  position: sticky;
+  top: var(--s-5);
+}
+@media (max-width: 980px) { .fmb-sp-inspector { position: static; } }
+
+.fmb-sp-insp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fmb-sp-insp-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-3, #6b6b73);
+  font-weight: 500;
+}
+.fmb-sp-insp-divider {
+  border: none;
+  border-top: 1px solid var(--border, #e6e3da);
+  margin: 0;
+}
+.fmb-sp-insp-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+.fmb-sp-insp-kv-label { color: var(--text-3, #6b6b73); }
+.fmb-sp-insp-kv-value {
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+  max-width: 65%;
+  word-break: break-word;
+}
+.fmb-sp-insp-kv-value.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+.fmb-sp-insp-tags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 65%; }
+.fmb-sp-insp-tags .fmb-chip { padding: 1px 7px; font-size: 11px; border-radius: 5px; }
+
+/* Progress bar */
+.fmb-sp-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fmb-sp-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-sp-progress-track {
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.fmb-sp-progress-fill {
+  height: 100%;
+  background: var(--brand);
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+
+/* Inspector question chip jumper — same chips, smaller density */
+.fmb-sp-insp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.fmb-sp-insp-chip {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2, #3b3b41);
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .12s, background .12s, color .12s;
+}
+.fmb-sp-insp-chip:hover { border-color: var(--brand); color: var(--brand-ink); background: var(--brand-soft); }
+.fmb-sp-insp-chip.active { border-color: var(--brand); color: var(--brand-ink); background: var(--brand-soft); }
+.fmb-sp-insp-chip.answered { background: var(--ok-soft); border-color: rgba(44,108,79,0.30); color: #2c6c4f; }
+
+/* Loading skeleton + error/empty containers reuse fmb-qf-skel shimmer */
+.fmb-sp-skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-qf-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fmb-sp-skel { animation: none; background: var(--surface-2); }
+}
+
+.fmb-sp-error-banner {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid transparent;
+  border-radius: var(--r-3);
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.fmb-sp-error-banner-title { font-weight: 600; }
+
+.fmb-sp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  text-align: center;
+  padding: var(--s-7) var(--s-5);
+  background: var(--surface, #fff);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-3);
+  color: var(--text-3, #6b6b73);
+}
+.fmb-sp-empty-title { color: var(--text); font-weight: 600; font-size: 14px; }
+
+/* Phase chip — used in the inspector to label the current preview phase */
+.fmb-sp-phase-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  align-self: flex-start;
+}
+.fmb-sp-phase-chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* Validation banner inside the phone screen */
+.fmb-sp-screen .fmb-sp-validation {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid rgba(193, 68, 47, 0.25);
+  border-radius: var(--r-2);
+  padding: 8px 12px;
+  font-size: 12.5px;
+  margin-bottom: var(--s-3);
+}
+
+/* ============================================================
+   Import Survey + Dumpsheet Validator (Phase 10)
+
+   Two file-driven workflows that share the same chrome — a
+   PageHeader, a stepper, an upload card with drop-zone styling,
+   summary cards, and a filtered errors table. ImportSurvey adds
+   a survey-picker phase (commit step); DumpsheetValidator is
+   single-pass (validate → review). All API calls, parsing,
+   CSV-download, and WaterAnimation behavior are preserved as-is
+   by the JSX; this CSS only re-skins the surrounding shell.
+   ============================================================ */
+.fmb-import-page,
+.fmb-dv-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+/* ── Stepper / phase indicator ──────────────────────────────── */
+.fmb-import-steps,
+.fmb-dv-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--text-3, #6b6b73);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.fmb-import-step,
+.fmb-dv-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  border: 1px solid var(--border, #e6e3da);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.fmb-import-step.active,
+.fmb-dv-step.active {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  border-color: rgba(75, 74, 147, 0.25);
+}
+.fmb-import-step.done,
+.fmb-dv-step.done {
+  background: var(--ok-soft);
+  color: #2c6c4f;
+  border-color: rgba(44, 108, 79, 0.25);
+}
+.fmb-import-step-sep,
+.fmb-dv-step-sep { color: var(--text-3, #6b6b73); padding: 0 2px; }
+
+/* ── Section card (used for upload, instructions, summary, errors) ── */
+.fmb-import-section,
+.fmb-dv-section {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.fmb-import-section-head,
+.fmb-dv-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-1);
+}
+.fmb-import-section-title,
+.fmb-dv-section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-import-section-sub,
+.fmb-dv-section-sub {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Instructions bullets re-skinned */
+.fmb-import-section ul,
+.fmb-dv-section ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2, #3b3b41);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.fmb-import-section ul strong,
+.fmb-dv-section ul strong { color: var(--text); font-weight: 600; }
+.fmb-import-section ul code,
+.fmb-dv-section ul code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  padding: 0 4px;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+
+/* ── Upload zone ────────────────────────────────────────────── */
+.fmb-import-upload,
+.fmb-dv-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  position: relative;
+}
+
+.fmb-import-dropzone,
+.fmb-dv-dropzone {
+  position: relative;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--r-3);
+  background: var(--surface-2);
+  padding: var(--s-6) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.fmb-import-dropzone:hover,
+.fmb-dv-dropzone:hover,
+.fmb-import-dropzone:focus-within,
+.fmb-dv-dropzone:focus-within {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.fmb-import-dropzone.has-file,
+.fmb-dv-dropzone.has-file {
+  border-style: solid;
+  background: var(--surface, #fff);
+}
+.fmb-import-dropzone.is-disabled,
+.fmb-dv-dropzone.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.fmb-import-dropzone input[type="file"],
+.fmb-dv-dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: inherit;
+  font-size: 0;
+}
+.fmb-import-dropzone-icon,
+.fmb-dv-dropzone-icon {
+  width: 36px; height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+.fmb-import-dropzone-title,
+.fmb-dv-dropzone-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.fmb-import-dropzone-sub,
+.fmb-dv-dropzone-sub {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+}
+
+/* Selected-file pill displayed inside the dropzone after selection */
+.fmb-import-file-pill,
+.fmb-dv-file-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text);
+}
+.fmb-import-file-pill code,
+.fmb-dv-file-pill code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-import-file-pill-size,
+.fmb-dv-file-pill-size {
+  color: var(--text-3, #6b6b73);
+  font-size: 11.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* Overwrite toggle (ImportSurvey only) */
+.fmb-import-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+}
+.fmb-import-toggle input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--brand);
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+.fmb-import-toggle > div { flex: 1; min-width: 0; }
+.fmb-import-toggle-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  cursor: pointer;
+}
+.fmb-import-toggle-sub {
+  font-size: 11.5px;
+  color: var(--text-3, #6b6b73);
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+/* Action bar — buttons inside the upload section */
+.fmb-import-actions,
+.fmb-dv-actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border, #e6e3da);
+}
+@media (max-width: 640px) {
+  .fmb-import-actions,
+  .fmb-dv-actions { flex-direction: column; }
+  .fmb-import-actions .btn,
+  .fmb-dv-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Validation summary metric tiles ─────────────────────────── */
+.fmb-import-metrics,
+.fmb-dv-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s-3);
+}
+.fmb-import-metric,
+.fmb-dv-metric {
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fmb-import-metric-label,
+.fmb-dv-metric-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-import-metric-value,
+.fmb-dv-metric-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.fmb-import-metric.danger .fmb-import-metric-value,
+.fmb-dv-metric.danger .fmb-dv-metric-value { color: var(--danger, #c1442f); }
+.fmb-import-metric.ok .fmb-import-metric-value,
+.fmb-dv-metric.ok .fmb-dv-metric-value { color: #2c6c4f; }
+
+/* ── Survey picker (ImportSurvey only) ───────────────────────── */
+.fmb-import-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.fmb-import-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 10px var(--s-3);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.fmb-import-picker-row:hover { border-color: var(--brand); background: var(--brand-soft); }
+.fmb-import-picker-row input[type="checkbox"] { accent-color: var(--brand); flex-shrink: 0; }
+.fmb-import-picker-row.has-errors { border-color: rgba(193, 68, 47, 0.35); }
+.fmb-import-picker-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.fmb-import-picker-name {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fmb-import-picker-errors {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ── Success card ───────────────────────────────────────────── */
+.fmb-import-success,
+.fmb-dv-success {
+  background: var(--ok-soft);
+  color: #2c6c4f;
+  border: 1px solid rgba(44, 108, 79, 0.30);
+  border-radius: var(--r-3);
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fmb-import-success-title,
+.fmb-dv-success-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* ── Error card (generic, no validation errors) ─────────────── */
+.fmb-import-error-card,
+.fmb-dv-error-card {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid rgba(193, 68, 47, 0.30);
+  border-radius: var(--r-3);
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fmb-import-error-card-title,
+.fmb-dv-error-card-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.fmb-import-error-card-sub,
+.fmb-dv-error-card-sub { font-size: 12.5px; color: var(--text-2, #3b3b41); }
+
+/* ── Filter chip strip (All / Survey / Question) ─────────────── */
+.fmb-import-filter,
+.fmb-dv-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fmb-import-filter-btn,
+.fmb-dv-filter-btn {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  background: var(--surface, #fff);
+  color: var(--text-2, #3b3b41);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.fmb-import-filter-btn:hover,
+.fmb-dv-filter-btn:hover { border-color: var(--brand); color: var(--brand-ink); }
+.fmb-import-filter-btn.active,
+.fmb-dv-filter-btn.active {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+
+/* ── Errors table (shared via .fmb-errors-table) ─────────────── */
+.fmb-errors-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+}
+.fmb-errors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 720px;
+}
+.fmb-errors-table thead th {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+}
+.fmb-errors-table thead .fmb-errors-table-filter-row th {
+  background: var(--surface, #fff);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+}
+.fmb-errors-table-filter-input {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-1);
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+.fmb-errors-table-filter-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+.fmb-errors-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  vertical-align: top;
+}
+.fmb-errors-table tbody tr:last-child td { border-bottom: none; }
+.fmb-errors-table tbody tr:hover { background: var(--surface-2); }
+.fmb-errors-table code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-errors-table ul { margin: 0; padding-left: 18px; }
+.fmb-errors-table li { line-height: 1.4; }
+
+/* Sheet badges */
+.fmb-errors-sheet-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+}
+.fmb-errors-sheet-badge.survey { background: var(--brand-soft); color: var(--brand-ink); }
+.fmb-errors-sheet-badge.question { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* Empty / placeholder state when no preview/report yet */
+.fmb-import-empty,
+.fmb-dv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  text-align: center;
+  padding: var(--s-6) var(--s-5);
+  color: var(--text-3, #6b6b73);
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-3);
+}
+.fmb-import-empty-title,
+.fmb-dv-empty-title { color: var(--text); font-weight: 600; font-size: 14px; }
+
+/* ============================================================
+   AccessSheet + DesignationMapping (Phase 11)
+
+   Two configuration / data-management screens that share the
+   same chrome — PageHeader, summary metric tiles, filter card,
+   table or action cards, and re-skinned empty/loading/error
+   states. All API calls, role gating, validation, and toast
+   behavior are preserved by the JSX; this CSS only re-skins
+   the surrounding shell.
+   ============================================================ */
+.fmb-as-page,
+.fmb-dm-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+/* Section card — shared structure */
+.fmb-as-section,
+.fmb-dm-section {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.fmb-as-section-head,
+.fmb-dm-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-1);
+}
+.fmb-as-section-title,
+.fmb-dm-section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-as-section-sub,
+.fmb-dm-section-sub {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Banners — reuse the import/dv pattern */
+.fmb-as-error-banner,
+.fmb-dm-error-banner {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid rgba(193, 68, 47, 0.30);
+  border-radius: var(--r-3);
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.fmb-as-success-banner,
+.fmb-dm-success-banner {
+  background: var(--ok-soft);
+  color: #2c6c4f;
+  border: 1px solid rgba(44, 108, 79, 0.30);
+  border-radius: var(--r-3);
+  padding: 12px 14px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── AccessSheet — admin state filter card ───────────────────── */
+.fmb-as-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) 1fr;
+  gap: var(--s-4);
+  align-items: end;
+}
+@media (max-width: 720px) {
+  .fmb-as-filter-grid { grid-template-columns: 1fr; }
+}
+.fmb-as-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fmb-as-field-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-as-field-input {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-as-field-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-as-field-help { font-size: 11.5px; color: var(--text-3, #6b6b73); margin: 0; }
+
+/* ── AccessSheet — action card grid (Generate + Download) ───── */
+.fmb-as-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--s-4);
+}
+
+.fmb-as-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.fmb-as-card-icon {
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+.fmb-as-card-icon.accent { background: var(--accent-soft); color: var(--accent-ink); }
+.fmb-as-card-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.fmb-as-card-desc {
+  font-size: 13px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Latest-dump metadata pill list inside the Download card */
+.fmb-as-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  font-size: 12.5px;
+  padding: var(--s-3);
+  background: var(--surface-2);
+  border-radius: var(--r-2);
+}
+.fmb-as-meta dt {
+  color: var(--text-3, #6b6b73);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.fmb-as-meta dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-word;
+}
+.fmb-as-meta dd.mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+
+.fmb-as-card-empty {
+  font-size: 13px;
+  color: var(--text-3, #6b6b73);
+  padding: var(--s-3);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-2);
+  text-align: center;
+}
+
+.fmb-as-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* Validation issues card — surfaces server-side ACCESS_SHEET_VALIDATION_FAILED */
+.fmb-as-issues {
+  background: var(--surface, #fff);
+  border: 1px solid rgba(193, 68, 47, 0.30);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.fmb-as-issues-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.fmb-as-issues-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--danger, #c1442f);
+  margin: 0;
+}
+
+/* Footer info note */
+.fmb-as-note {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-2);
+  padding: var(--s-3) var(--s-4);
+  line-height: 1.55;
+}
+
+/* ── DesignationMapping — filters + summary + table ────────── */
+.fmb-dm-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s-4);
+  align-items: end;
+}
+.fmb-dm-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fmb-dm-field-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-dm-field-input,
+.fmb-dm-field-select {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-dm-field-input:focus,
+.fmb-dm-field-select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-dm-field-input:disabled,
+.fmb-dm-field-select:disabled {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  cursor: not-allowed;
+}
+.fmb-dm-field-help { font-size: 11px; color: var(--text-3, #6b6b73); margin: 0; }
+.fmb-dm-field-error {
+  font-size: 12px;
+  color: var(--danger, #c1442f);
+  font-weight: 500;
+}
+.fmb-dm-required { color: var(--danger, #c1442f); font-weight: 600; }
+
+/* Summary metric tiles */
+.fmb-dm-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s-3);
+}
+.fmb-dm-metric {
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fmb-dm-metric-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-dm-metric-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+/* Form grid */
+.fmb-dm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-4);
+}
+.fmb-dm-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border, #e6e3da);
+}
+@media (max-width: 640px) {
+  .fmb-dm-form-actions { flex-direction: column-reverse; }
+  .fmb-dm-form-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* Table */
+.fmb-dm-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+}
+.fmb-dm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 640px;
+}
+.fmb-dm-table thead th {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  white-space: nowrap;
+}
+.fmb-dm-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  vertical-align: middle;
+}
+.fmb-dm-table tbody tr:last-child td { border-bottom: none; }
+.fmb-dm-table tbody tr:hover { background: var(--surface-2); }
+
+/* Hierarchy-level badge */
+.fmb-dm-level {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* State / language chip */
+.fmb-dm-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-dm-chip.accent {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: rgba(127, 200, 190, 0.30);
+}
+
+/* Action cell — keep buttons compact */
+.fmb-dm-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Empty state */
+.fmb-dm-empty,
+.fmb-as-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  text-align: center;
+  padding: var(--s-7) var(--s-5);
+  background: var(--surface, #fff);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-3);
+  color: var(--text-3, #6b6b73);
+}
+.fmb-dm-empty-title,
+.fmb-as-empty-title {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Loading skeleton — reuse shimmer */
+.fmb-dm-skel,
+.fmb-as-skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-qf-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fmb-dm-skel, .fmb-as-skel { animation: none; background: var(--surface-2); }
+}
+
+/* Action bar — buttons aligned with form-actions in other screens */
+.fmb-dm-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .fmb-dm-toolbar { flex-direction: column; align-items: stretch; }
+  .fmb-dm-toolbar .btn { width: 100%; justify-content: center; }
+}
+
+/* ============================================================
+   AdminPanel (Phase 12)
+
+   Enterprise-grade admin console. Two tabs (States, Users)
+   deep-linkable via ?tab=, summary tiles per tab derived
+   from real loaded data, polished tables + forms, accessible
+   error/retry banners. All role gating + API contracts are
+   preserved by the JSX; this CSS only re-skins the shell.
+   ============================================================ */
+.fmb-ap-page { display: flex; flex-direction: column; gap: var(--s-5); }
+
+/* ── Tabs ─────────────────────────────────────────────────── */
+.fmb-ap-tablist {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.fmb-ap-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3, #6b6b73);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .12s, border-color .12s, background .12s;
+  white-space: nowrap;
+}
+.fmb-ap-tab:hover { color: var(--text); background: var(--surface-2); }
+.fmb-ap-tab[aria-selected="true"] {
+  color: var(--brand-ink);
+  border-bottom-color: var(--brand);
+}
+.fmb-ap-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--brand-soft);
+  border-radius: var(--r-1);
+}
+.fmb-ap-tab-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-ap-tab[aria-selected="true"] .fmb-ap-tab-count {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+
+/* ── Tab panel container ─────────────────────────────────── */
+.fmb-ap-panel { display: flex; flex-direction: column; gap: var(--s-4); }
+
+/* ── Section card (shared with other phase shells) ───────── */
+.fmb-ap-section {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.fmb-ap-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-1);
+}
+.fmb-ap-section-head.with-actions {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+.fmb-ap-section-head.with-actions > div { flex: 1; min-width: 0; }
+.fmb-ap-section-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  margin: 0;
+}
+.fmb-ap-section-sub {
+  font-size: 12.5px;
+  color: var(--text-3, #6b6b73);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Banners ─────────────────────────────────────────────── */
+.fmb-ap-error-banner {
+  background: var(--danger-soft);
+  color: var(--danger, #c1442f);
+  border: 1px solid rgba(193, 68, 47, 0.30);
+  border-radius: var(--r-3);
+  padding: 12px 14px;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.fmb-ap-error-banner-msg { flex: 1; min-width: 0; }
+
+/* ── Summary metric tiles ────────────────────────────────── */
+.fmb-ap-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s-3);
+}
+.fmb-ap-metric {
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fmb-ap-metric-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-3, #6b6b73);
+}
+.fmb-ap-metric-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.fmb-ap-metric.brand .fmb-ap-metric-value { color: var(--brand-ink); }
+.fmb-ap-metric.accent .fmb-ap-metric-value { color: var(--accent-ink); }
+
+/* ── Form fields ─────────────────────────────────────────── */
+.fmb-ap-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fmb-ap-field-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2, #3b3b41);
+}
+.fmb-ap-required { color: var(--danger, #c1442f); font-weight: 600; }
+.fmb-ap-field-input,
+.fmb-ap-field-select {
+  width: 100%;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-2);
+  padding: var(--field-pad);
+  font-size: 14px;
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.fmb-ap-field-input:focus,
+.fmb-ap-field-select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+.fmb-ap-field-input:disabled,
+.fmb-ap-field-select:disabled {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  cursor: not-allowed;
+}
+.fmb-ap-field-input[aria-invalid="true"],
+.fmb-ap-field-select[aria-invalid="true"] {
+  border-color: var(--danger, #c1442f);
+}
+.fmb-ap-field-error {
+  font-size: 11.5px;
+  color: var(--danger, #c1442f);
+  font-weight: 500;
+}
+.fmb-ap-field-help {
+  font-size: 11px;
+  color: var(--text-3, #6b6b73);
+  margin: 0;
+}
+.fmb-ap-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-4);
+}
+.fmb-ap-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border, #e6e3da);
+}
+@media (max-width: 640px) {
+  .fmb-ap-form-actions { flex-direction: column-reverse; }
+  .fmb-ap-form-actions .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Language checkbox grid (state form) ─────────────────── */
+.fmb-ap-langs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+.fmb-ap-lang-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.fmb-ap-lang-cell:hover { border-color: var(--brand); }
+.fmb-ap-lang-cell input { accent-color: var(--brand); margin: 0; }
+.fmb-ap-langs-summary {
+  font-size: 12px;
+  color: var(--text-3, #6b6b73);
+  margin-top: 4px;
+}
+
+/* ── Table ───────────────────────────────────────────────── */
+.fmb-ap-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-2);
+}
+.fmb-ap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 720px;
+}
+.fmb-ap-table thead th {
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  white-space: nowrap;
+}
+.fmb-ap-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #e6e3da);
+  vertical-align: top;
+}
+.fmb-ap-table tbody tr:last-child td { border-bottom: none; }
+.fmb-ap-table tbody tr:hover { background: var(--surface-2); }
+.fmb-ap-table .ident {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fmb-ap-table .ident-primary { font-weight: 500; color: var(--text); }
+.fmb-ap-table .ident-sub { font-size: 11.5px; color: var(--text-3, #6b6b73); }
+
+/* Badges */
+.fmb-ap-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text-3, #6b6b73);
+  white-space: nowrap;
+}
+.fmb-ap-badge.role-admin { background: var(--brand-soft); color: var(--brand-ink); }
+.fmb-ap-badge.role-state { background: var(--accent-soft); color: var(--accent-ink); }
+.fmb-ap-badge.active     { background: var(--ok-soft); color: #2c6c4f; }
+.fmb-ap-badge.inactive   { background: var(--surface-3); color: var(--text-3, #6b6b73); }
+.fmb-ap-badge.state-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  background: var(--surface-2);
+  border: 1px solid var(--border, #e6e3da);
+  color: var(--text-2, #3b3b41);
+}
+
+/* Row actions */
+.fmb-ap-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Inline edit row */
+.fmb-ap-edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fmb-ap-input-sm {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-1);
+  padding: 4px 8px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.fmb-ap-input-sm:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+
+/* ── Empty + loading ─────────────────────────────────────── */
+.fmb-ap-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  text-align: center;
+  padding: var(--s-7) var(--s-5);
+  background: var(--surface, #fff);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-3);
+  color: var(--text-3, #6b6b73);
+}
+.fmb-ap-empty-title {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.fmb-ap-skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: fmb-qf-shimmer 1.2s linear infinite;
+  border-radius: var(--r-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fmb-ap-skel { animation: none; background: var(--surface-2); }
+}
+
+/* ── Modal (attach-email) ───────────────────────────────── */
+.fmb-ap-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 18, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--s-4);
+}
+.fmb-ap-modal {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e6e3da);
+  border-radius: var(--r-4);
+  padding: var(--s-5);
+  width: 100%;
+  max-width: 500px;
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.fmb-ap-modal-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+/* Compact action toolbar */
+.fmb-ap-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .fmb-ap-toolbar { flex-direction: column; align-items: stretch; }
+  .fmb-ap-toolbar .btn { width: 100%; justify-content: center; }
+}

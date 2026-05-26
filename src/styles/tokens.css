@@ -1,0 +1,189 @@
+/* ============================================================
+   FMB Survey Builder — Design Tokens (Phase 1)
+
+   Source: Claude Design handoff (covYSF9WwBdu9Kso9-Z9TQ) — see
+   docs/adr/0001 + the design migration plan in chat history.
+
+   Rules of engagement with the existing App.css:
+   1. Tokens here use NEW names that do not clash with App.css's
+      legacy vars (--bg-page, --text-1, --blue/green/amber/red,
+      --slate-*, --shadow-xs/sm/md/lg/xl, --radius-xs/sm/md/lg/xl/full,
+      --fs-*, --font-sans, --font-mono, --nav-w). Where a name
+      would have collided (e.g. --surface, --border, --text-2/3/4)
+      we DO NOT redefine it here — App.css continues to own it,
+      so existing screens render exactly as before.
+   2. tokens.css is imported FIRST in src/index.jsx so App.css can
+      override on any accidental collision and current screens are
+      visually untouched.
+   3. New UI primitives (Phase 2) and the new app shell (Phase 3)
+      reference the design tokens introduced here, plus the few
+      shared vars they have in common with App.css.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  /* ── brand ─────────────────────────────────────────────────── */
+  --brand:         #4b4a93;   /* ConveGenius indigo */
+  --brand-hover:   #3d3c7a;
+  --brand-soft:    #ecebf4;
+  --brand-ink:     #2a2960;
+  --accent:        #7fc8be;   /* warm teal */
+  --accent-soft:   #e2f1ee;
+  --accent-ink:    #2f6f63;
+
+  /* ── design surfaces (additive — App.css owns --surface/--border) ── */
+  --bg:            #faf9f6;
+  --surface-2:     #f4f2ec;
+  --surface-3:     #ecebe4;
+  --border-strong: #d4d1c7;
+  --text:          #16161a;
+
+  /* ── design semantics (additive) ─────────────────────────────── */
+  --danger-soft:   #fbecea;
+  --warn-soft:     #fbf0d8;
+  --ok-soft:       #e1f1e6;
+
+  /* ── radii (design scale, additive) ─────────────────────────── */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --r-4: 14px;
+  --r-5: 20px;
+
+  /* ── spacing scale ──────────────────────────────────────────── */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 48px;
+
+  /* ── density-driven sizing (consumed by ui primitives) ──────── */
+  --row-h:     44px;
+  --field-pad: 10px 14px;
+  --card-pad:  24px;
+
+  /* ── typography (display only — --font-sans/--font-mono stay
+       as App.css defines them so legacy screens are untouched) ── */
+  --font-display: 'Geist', system-ui, -apple-system, sans-serif;
+
+  /* ── design shadow ramp (additive) ─────────────────────────── */
+  --shadow-1: 0 1px 0 rgba(22,22,26,0.04), 0 1px 2px rgba(22,22,26,0.04);
+  --shadow-2: 0 4px 12px rgba(22,22,26,0.06), 0 1px 0 rgba(22,22,26,0.04);
+  --shadow-3: 0 24px 60px rgba(22,22,26,0.12), 0 2px 4px rgba(22,22,26,0.04);
+
+  /* ── shell width (additive — App.css uses --nav-w too;
+       on collision App.css wins because it loads after us) ── */
+  --ui-nav-w: 240px;
+}
+
+/* ============================================================
+   Density variants — toggle by setting body.density-{compact|balanced|comfy}
+   (mirrors the prototype). New ui primitives read these vars; legacy
+   screens are unaffected because they use --radius-* / --fs-*.
+   ============================================================ */
+body.density-compact {
+  --row-h:     36px;
+  --field-pad: 7px 12px;
+  --card-pad:  18px;
+  --s-6: 18px;
+  --s-7: 24px;
+}
+body.density-balanced {
+  /* defaults already set in :root */
+}
+body.density-comfy {
+  --row-h:     52px;
+  --field-pad: 13px 16px;
+  --card-pad:  28px;
+}
+
+/* ============================================================
+   Accent variants — set on <html> via useTweaks
+   ============================================================ */
+:root[data-accent="teal"]   { --brand: #2f8a7e; --brand-hover: #246b62; --brand-soft: #dfeeec; --brand-ink: #0f4a40; }
+:root[data-accent="amber"]  { --brand: #b67310; --brand-hover: #8d5a0b; --brand-soft: #f6e9cf; --brand-ink: #5a3705; }
+:root[data-accent="forest"] { --brand: #2f6f4a; --brand-hover: #235638; --brand-soft: #d6e8de; --brand-ink: #143424; }
+:root[data-accent="ink"]    { --brand: #1f1f24; --brand-hover: #000;    --brand-soft: #e9e7e0; --brand-ink: #000; }
+
+/* ============================================================
+   Font variants — override --font-display only; we intentionally
+   leave --font-sans (App.css) alone so existing screens don't shift.
+   ============================================================ */
+:root[data-font="manrope"] { --font-display: 'Manrope', system-ui, sans-serif; }
+:root[data-font="plex"]    { --font-display: 'IBM Plex Sans', system-ui, sans-serif; }
+:root[data-font="serif"]   { --font-display: 'Instrument Serif', 'Times New Roman', serif; }
+
+/* ============================================================
+   Dark-mode overrides for design tokens only.
+   App.css already has its own [data-theme='dark'] block; we ADD
+   our design tokens on top so the new primitives darken too.
+   ============================================================ */
+:root[data-theme="dark"] {
+  --bg:            #0f0f12;
+  --surface-2:     #1c1c24;
+  --surface-3:     #25252f;
+  --border-strong: #3a3a48;
+  --text:          #f3f1ec;
+  --brand:         #8b8ad6;
+  --brand-hover:   #a3a3e2;
+  --brand-soft:    #21204a;
+  --brand-ink:     #c5c4ef;
+  --accent:        #7fc8be;
+  --accent-soft:   #1b3835;
+  --accent-ink:    #a8e0d6;
+  --danger-soft:   #3a1a18;
+  --warn-soft:     #3a2a10;
+  --ok-soft:       #163827;
+  --shadow-1: 0 1px 0 rgba(0,0,0,0.4);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-3: 0 24px 60px rgba(0,0,0,0.5);
+}
+
+/* ============================================================
+   Selection (subtle brand tint). Existing App.css has no rule.
+   ============================================================ */
+::selection { background: var(--brand-soft); color: var(--brand-ink); }
+
+/* ============================================================
+   Design-token re-assertion (Phase 5.6)
+
+   `swiftchatRedesign.css` defines `--accent`, `--accent-soft`, and a
+   few related tokens inside a `:root, :root[data-theme='light'],
+   :root[data-theme='dark']` block (specificity 0,0,2) and loads
+   AFTER tokens.css, which means its values win on equal specificity.
+   This re-asserts the design tokens with `html:root[data-theme=…]`
+   selectors (specificity 0,0,3) so the design's intended teal +
+   ConveGenius indigo render on every new fmb-* surface (Login,
+   AccessDenied, Sidebar, etc.) — without touching any legacy CSS.
+
+   We re-declare only the tokens that swiftchatRedesign.css actually
+   overrides. New design-only tokens (--brand-*, --r-*, --s-*,
+   --row-h, etc.) are untouched here because they don't collide.
+
+   Accent variants set via the Tweaks panel still apply because they
+   use the same `[data-accent=…]` selector at the same specificity
+   ramp; only the BASE accent value is being pinned to the brand teal
+   when no override is active. The accent-variant block sits earlier
+   in this file (`[data-accent="teal|amber|…"]`) and is matched
+   when data-accent is set explicitly — we don't shadow that here.
+   ============================================================ */
+html:root[data-theme="light"] {
+  --accent:        #7fc8be;
+  --accent-soft:   #e2f1ee;
+  --accent-ink:    #2f6f63;
+  --danger-soft:   #fbecea;
+  --warn-soft:     #fbf0d8;
+  --ok-soft:       #e1f1e6;
+}
+html:root[data-theme="dark"] {
+  --accent:        #7fc8be;
+  --accent-soft:   #1b3835;
+  --accent-ink:    #a8e0d6;
+  --danger-soft:   #3a1a18;
+  --warn-soft:     #3a2a10;
+  --ok-soft:       #163827;
+}

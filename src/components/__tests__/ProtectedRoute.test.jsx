@@ -26,6 +26,7 @@ const renderAt = (initialPath, { children, requiredRole } = {}) =>
         />
         <Route path="/" element={<div>state-home</div>} />
         <Route path="/login" element={<div>login-page</div>} />
+        <Route path="/access-denied" element={<div>access-denied-page</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -56,6 +57,16 @@ describe('ProtectedRoute', () => {
     renderAt('/admin', { requiredRole: 'admin' });
     expect(screen.getByText('state-home')).toBeInTheDocument();
   });
+
+  test.each(['NOT_INVITED', 'INACTIVE', 'DOMAIN_BLOCKED'])(
+    'no user + authReason=%s sends the visitor to /access-denied instead of /login',
+    (reason) => {
+      useAuth.mockReturnValue({ user: null, loading: false, authReason: reason });
+      renderAt('/admin');
+      expect(screen.getByText('access-denied-page')).toBeInTheDocument();
+      expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+    }
+  );
 
   test('admin hitting a non-admin route is redirected to /admin', () => {
     useAuth.mockReturnValue({ user: { role: 'admin' }, loading: false });

@@ -25,3 +25,6 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
+test-results
+smoke
+.env

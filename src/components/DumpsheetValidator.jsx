@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useToast } from './Toast';
 import WaterAnimation from './WaterAnimation';
+import PageHeader from './ui/PageHeader';
+import Icon from './ui/Icon';
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
@@ -57,6 +59,8 @@ function downloadBlob(content, filename, type = 'text/csv;charset=utf-8') {
   URL.revokeObjectURL(url);
 }
 
+const STEPS = ['Upload', 'Validate', 'Review'];
+
 const DumpsheetValidator = () => {
   const navigate = useNavigate();
   const toast = useToast();
@@ -66,6 +70,7 @@ const DumpsheetValidator = () => {
   const [genericError, setGenericError] = useState(null);
   const [errorFilter, setErrorFilter] = useState('all'); // 'all' | 'survey' | 'question'
   const [columnFilters, setColumnFilters] = useState({ surveyId: '', type: '', row: '', id: '', errors: '' });
+  const fileInputRef = useRef(null);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -139,14 +144,19 @@ const DumpsheetValidator = () => {
     setGenericError(null);
     setErrorFilter('all');
     setColumnFilters({ surveyId: '', type: '', row: '', id: '', errors: '' });
-    const input = document.getElementById('dump-file-input');
-    if (input) input.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const sourceErrors = report?.validationErrors || [];
+  const sourceErrors = useMemo(() => report?.validationErrors || [], [report]);
 
-  const surveyErrorCount = sourceErrors.filter(e => e.type === 'survey').length;
-  const questionErrorCount = sourceErrors.filter(e => e.type === 'question').length;
+  const surveyErrorCount = useMemo(
+    () => sourceErrors.filter(e => e.type === 'survey').length,
+    [sourceErrors]
+  );
+  const questionErrorCount = useMemo(
+    () => sourceErrors.filter(e => e.type === 'question').length,
+    [sourceErrors]
+  );
 
   const filteredErrors = useMemo(() => {
     const lc = (s) => String(s ?? '').toLowerCase();
@@ -183,152 +193,224 @@ const DumpsheetValidator = () => {
 
   const hasReport = report !== null;
 
+  /* ── Phase derivation for the stepper ───────────────────────── */
+  // Upload   → file selected
+  // Validate → API has returned a report
+  // Review   → looking at the report
+  const currentStep = hasReport ? 2 : (file ? 1 : 0);
+
   return (
-    <div className="import-survey-container">
-      <div className="list-header">
-        <div>
-          <h2>Dumpsheet Validator</h2>
-          <p className="subtitle">
-            Upload a dump sheet to validate. Only rows with <strong>Mode = Correction</strong> or <strong>New Data</strong> are checked.
-            Nothing is saved.
-          </p>
-        </div>
-        <div className="header-actions">
+    <div className="fmb-dv-page" data-testid="dv-page">
+      <PageHeader
+        eyebrow="DATA"
+        title="Dumpsheet validator"
+        sub="Upload a dumpsheet to validate. Only rows with Mode = Correction or New Data are checked. Nothing is saved."
+        actions={
           <button
-            className="btn btn-secondary btn-sm btn-cta btn-icon-back"
+            type="button"
+            className="btn btn-secondary btn-sm"
             onClick={() => navigate('/')}
+            data-testid="dv-back"
           >
-            Back to Surveys
+            <Icon name="chevronLeft" /> Back to Surveys
           </button>
-        </div>
+        }
+      />
+
+      <div className="fmb-dv-steps" data-testid="dv-steps" aria-label="Validation progress">
+        {STEPS.map((label, idx) => {
+          const stepClass = idx === currentStep
+            ? 'fmb-dv-step active'
+            : idx < currentStep ? 'fmb-dv-step done' : 'fmb-dv-step';
+          return (
+            <React.Fragment key={label}>
+              {idx > 0 && <span className="fmb-dv-step-sep" aria-hidden="true">›</span>}
+              <span className={stepClass}>{idx + 1}. {label}</span>
+            </React.Fragment>
+          );
+        })}
       </div>
 
-      <div className="import-instructions">
-        <h3>How it works</h3>
+      {/* Instructions */}
+      <section className="fmb-dv-section" aria-labelledby="dv-instructions-h">
+        <header className="fmb-dv-section-head">
+          <h3 id="dv-instructions-h" className="fmb-dv-section-title">How it works</h3>
+          <p className="fmb-dv-section-sub">
+            This tool is read-only — no surveys or questions are written to the database.
+          </p>
+        </header>
         <ul>
-          <li>Upload an XLSX or CSV containing <strong>Survey Master</strong> and/or <strong>Question Master</strong> sheets</li>
-          <li>Rows with <code>Mode</code> set to <strong>Correction</strong> or <strong>New Data</strong> are validated</li>
-          <li>Rows with <code>Mode = None</code> (or blank) are ignored</li>
-          <li>No surveys or questions are written to the database — this is read-only</li>
-          <li>Errors stay on screen until you click <strong>Clear</strong></li>
+          <li>Upload an XLSX or CSV containing <strong>Survey Master</strong> and/or <strong>Question Master</strong> sheets.</li>
+          <li>Rows with <code>Mode</code> set to <strong>Correction</strong> or <strong>New Data</strong> are validated.</li>
+          <li>Rows with <code>Mode = None</code> (or blank) are ignored.</li>
+          <li>Errors stay on screen until you click <strong>Clear</strong>.</li>
         </ul>
-      </div>
+      </section>
 
-      <div className="admin-form-card">
-        <div className="form-group">
-          <label>
-            Select File&nbsp;
-            <span style={{ color: 'var(--text-3)', fontWeight: 400, textTransform: 'none', letterSpacing: 'normal' }}>
-              (XLSX, XLS or CSV)
-            </span>
-          </label>
+      {/* Upload */}
+      <section className="fmb-dv-section" aria-labelledby="dv-upload-h">
+        <header className="fmb-dv-section-head">
+          <h3 id="dv-upload-h" className="fmb-dv-section-title">Upload file</h3>
+          <p className="fmb-dv-section-sub">Accepted: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong>. Max 10 MB.</p>
+        </header>
+
+        <div className={`fmb-dv-dropzone${file ? ' has-file' : ''}${validating ? ' is-disabled' : ''}`} data-testid="dv-dropzone">
+          <span className="fmb-dv-dropzone-icon" aria-hidden="true">
+            <Icon name="upload" size={18} />
+          </span>
+          <div className="fmb-dv-dropzone-title">
+            {file ? 'File ready — Validate or replace below' : 'Drop a workbook here, or click to choose'}
+          </div>
+          <div className="fmb-dv-dropzone-sub">XLSX / XLS / CSV · up to 10 MB</div>
+          {file && (
+            <div className="fmb-dv-file-pill" data-testid="dv-file-pill">
+              <Icon name="file" size={14} />
+              <code>{file.name}</code>
+              <span className="fmb-dv-file-pill-size">{(file.size / 1024).toFixed(2)} KB</span>
+            </div>
+          )}
           <input
+            ref={fileInputRef}
             id="dump-file-input"
             type="file"
             accept=".xlsx,.xls,.csv"
             onChange={handleFileChange}
-            className="file-input"
             disabled={validating}
+            aria-label="Select XLSX, XLS, or CSV file to validate"
+            data-testid="dv-file-input"
           />
-          {file && (
-            <div className="file-selected">
-              <strong>Selected:</strong> {file.name}&nbsp;
-              <span style={{ opacity: 0.75 }}>({(file.size / 1024).toFixed(2)} KB)</span>
-            </div>
-          )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="fmb-dv-actions">
           <button
-            className="btn btn-primary btn-cta"
+            type="button"
+            className="btn btn-primary btn-sm"
             onClick={handleValidate}
             disabled={!file || validating}
+            data-testid="dv-validate"
           >
             {validating ? 'Validating…' : (hasReport ? 'Re-upload & Validate' : 'Validate')}
           </button>
           {(hasReport || genericError || file) && (
             <button
-              className="btn btn-secondary btn-cta"
+              type="button"
+              className="btn btn-secondary btn-sm"
               onClick={handleClear}
               disabled={validating}
+              data-testid="dv-clear"
             >
               Clear
             </button>
           )}
         </div>
         <WaterAnimation active={validating} />
-      </div>
+      </section>
 
-      {report && sourceErrors.length === 0 && (
-        <div className="import-success">
-          <h3>No issues found</h3>
-          <p>
+      {/* Validation summary metrics */}
+      {hasReport && (
+        <section className="fmb-dv-section" aria-labelledby="dv-summary-h" data-testid="dv-summary">
+          <header className="fmb-dv-section-head">
+            <h3 id="dv-summary-h" className="fmb-dv-section-title">Validation summary</h3>
+            <p className="fmb-dv-section-sub">Counts reflect rows with Mode = Correction or New Data.</p>
+          </header>
+          <div className="fmb-dv-metrics">
+            <div className="fmb-dv-metric">
+              <span className="fmb-dv-metric-label">Surveys</span>
+              <span className="fmb-dv-metric-value">{report.surveysCount || 0}</span>
+            </div>
+            <div className="fmb-dv-metric">
+              <span className="fmb-dv-metric-label">Questions</span>
+              <span className="fmb-dv-metric-value">{report.questionsCount || 0}</span>
+            </div>
+            <div className={`fmb-dv-metric${sourceErrors.length > 0 ? ' danger' : ' ok'}`}>
+              <span className="fmb-dv-metric-label">Issues</span>
+              <span className="fmb-dv-metric-value">{sourceErrors.length}</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* No-issues success card */}
+      {hasReport && sourceErrors.length === 0 && (
+        <section className="fmb-dv-success" role="status" data-testid="dv-success">
+          <div className="fmb-dv-success-title">No issues found</div>
+          <div>
             Validated {report.questionsCount || 0} question row(s) and {report.surveysCount || 0} survey row(s)
             with mode = Correction or New Data.
-          </p>
-        </div>
+          </div>
+        </section>
       )}
 
+      {/* Generic error */}
       {genericError && (
-        <div className="import-errors">
-          <h3>Validation Failed</h3>
-          <p style={{ marginBottom: genericError.details ? '0.75rem' : 0 }}>{formatError(genericError.error, 'Validation failed')}</p>
-          {genericError.message && <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-2)' }}>{formatError(genericError.message)}</p>}
+        <section className="fmb-dv-error-card" role="alert" data-testid="dv-error-card">
+          <div className="fmb-dv-error-card-title">Validation failed</div>
+          <div>{formatError(genericError.error, 'Validation failed')}</div>
+          {genericError.message && <div className="fmb-dv-error-card-sub">{formatError(genericError.message)}</div>}
           {Array.isArray(genericError.details?.sheetsFound) && (
-            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-3)' }}>
+            <div className="fmb-dv-error-card-sub">
               Sheets found in file: {genericError.details.sheetsFound.map(s => `"${s}"`).join(', ') || 'none'}
-            </p>
+            </div>
           )}
-        </div>
+        </section>
       )}
 
+      {/* Validation errors */}
       {sourceErrors.length > 0 && (
-        <div className="import-errors">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div>
-              <h3>Validation Errors</h3>
-              <p className="error-summary">
-                Showing {filteredErrors.length} of {sourceErrors.length} issue(s).
-                Validated against rows with mode = Correction or New Data.
-              </p>
+        <section className="fmb-dv-section" aria-labelledby="dv-errors-h" data-testid="dv-errors">
+          <header className="fmb-dv-section-head">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h3 id="dv-errors-h" className="fmb-dv-section-title">Validation errors</h3>
+                <p className="fmb-dv-section-sub">
+                  Showing {filteredErrors.length} of {sourceErrors.length} issue(s). Validated against rows with mode = Correction or New Data.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleDownloadCsv}
+                disabled={filteredErrors.length === 0}
+                data-testid="dv-download-csv"
+              >
+                Download CSV
+              </button>
             </div>
+          </header>
+
+          <div className="fmb-dv-filter">
             <button
               type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={handleDownloadCsv}
-              disabled={filteredErrors.length === 0}
-            >
-              Download CSV
-            </button>
-          </div>
-
-          <div className="error-filter-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button
-              className={`btn btn-sm ${errorFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              className={`fmb-dv-filter-btn${errorFilter === 'all' ? ' active' : ''}`}
               onClick={() => setErrorFilter('all')}
+              data-testid="dv-filter-all"
             >
               All ({sourceErrors.length})
             </button>
             {surveyErrorCount > 0 && (
               <button
-                className={`btn btn-sm ${errorFilter === 'survey' ? 'btn-primary' : 'btn-secondary'}`}
+                type="button"
+                className={`fmb-dv-filter-btn${errorFilter === 'survey' ? ' active' : ''}`}
                 onClick={() => setErrorFilter('survey')}
+                data-testid="dv-filter-survey"
               >
                 Survey ({surveyErrorCount})
               </button>
             )}
             {questionErrorCount > 0 && (
               <button
-                className={`btn btn-sm ${errorFilter === 'question' ? 'btn-primary' : 'btn-secondary'}`}
+                type="button"
+                className={`fmb-dv-filter-btn${errorFilter === 'question' ? ' active' : ''}`}
                 onClick={() => setErrorFilter('question')}
+                data-testid="dv-filter-question"
               >
                 Question ({questionErrorCount})
               </button>
             )}
           </div>
 
-          <div className="errors-table-container">
-            <table className="errors-table">
+          <div className="fmb-errors-table-wrap">
+            <table className="fmb-errors-table" data-testid="dv-errors-table">
               <thead>
                 <tr>
                   <th>Survey ID</th>
@@ -337,15 +419,16 @@ const DumpsheetValidator = () => {
                   <th>ID</th>
                   <th>Errors</th>
                 </tr>
-                <tr className="errors-table-filter-row">
+                <tr className="fmb-errors-table-filter-row">
                   {['surveyId', 'type', 'row', 'id', 'errors'].map(col => (
                     <th key={col}>
                       <input
                         type="text"
-                        className="errors-table-filter-input"
+                        className="fmb-errors-table-filter-input"
                         placeholder="Filter…"
                         value={columnFilters[col]}
                         onChange={(e) => setColumnFilters(prev => ({ ...prev, [col]: e.target.value }))}
+                        aria-label={`Filter by ${col}`}
                       />
                     </th>
                   ))}
@@ -355,11 +438,11 @@ const DumpsheetValidator = () => {
                 {filteredErrors.map((error, idx) => (
                   <tr key={idx}>
                     <td><code>{error.surveyId || ''}</code></td>
-                    <td><span className={`sheet-badge sheet-badge-${error.type}`}>{error.type}</span></td>
+                    <td><span className={`fmb-errors-sheet-badge ${error.type || ''}`}>{error.type}</span></td>
                     <td>{error.index ?? error.row ?? ''}</td>
                     <td><code>{error.questionId || error.surveyId || ''}</code></td>
                     <td>
-                      <ul style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                      <ul>
                         {(error.errors || []).map((err, errIdx) => (
                           <li key={errIdx}>{formatError(err)}</li>
                         ))}
@@ -370,7 +453,7 @@ const DumpsheetValidator = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

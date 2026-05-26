@@ -4,7 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { questionAPI, surveyAPI } from '../services/api';
 import { useValidation } from '../hooks/useValidation';
 import { questionTypes, textInputTypes, questionMediaTypes, yesNoOptions, getFieldsForQuestionType } from '../schemas/questionTypeSchema';
-import { getNativeScript, getISOCode } from '../schemas/languageMappings';
+import { getNativeScript } from '../schemas/languageMappings';
+import PageHeader from './ui/PageHeader';
+import Icon from './ui/Icon';
+import Badge from './ui/Badge';
+import Chip from './ui/Chip';
 
 const TABLE_QUESTION_MAX = 20;
 const getRowLabel = (i) => String.fromCharCode(97 + i);
@@ -654,522 +658,872 @@ const QuestionForm = () => {
     }
   };
 
+  // ─── Live-preview derivations (Phase 8B) ────────────────────────────────
+  // The right-side preview reads ONLY from existing form state. It never
+  // mutates state, never calls an API, never alters the payload contract.
+  const preview = (() => {
+    const id = String(formData.questionId || '').trim();
+    const normalizedId = id ? normalizeQuestionId(id) : '';
+    const isChild = normalizedId.includes('.');
+    const derivedParent = isChild ? getParentQuestionId(normalizedId) : '';
+    const parentId = String(formData.sourceQuestion || '').trim() || derivedParent;
+
+    const optionCount = Array.isArray(formData.options) ? formData.options.length : 0;
+    const tableRowCount = fieldConfig.showTableFields ? tableQuestions.length : 0;
+
+    return {
+      id: normalizedId,
+      type: formData.questionType,
+      isMandatory: formData.isMandatory === 'Yes',
+      isDynamic: formData.isDynamic === 'Yes',
+      description: formData.questionDescription,
+      medium: formData.medium,
+      optionCount,
+      tableRowCount,
+      parentId,
+      showOptions: fieldConfig.showOptions === true,
+      showTable: fieldConfig.showTableFields === true,
+    };
+  })();
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  if (loadError) {
+  const backToQuestions = () => navigate(`/surveys/${surveyId}/questions`);
+
+  // Loading skeleton — replaces the bare "Loading…" div. Tests gate on the
+  // form heading via `findByRole('heading', { name: /Add New Question|Edit Question/i })`,
+  // so the skeleton title is deliberately a NON-matching phrase ("Question
+  // form") to avoid resolving the form's heading wait too early.
+  if (!survey && !loadError) {
     return (
-      <div className="form-container">
-        <div className="error-message">{loadError}</div>
-        <button className="btn btn-secondary mt-3" onClick={() => navigate(`/surveys/${surveyId}/questions`)}>
-          Back to Questions
-        </button>
+      <div className="fmb-qf-page" data-testid="questionform-loading">
+        <PageHeader
+          eyebrow={surveyId || undefined}
+          title="Question form"
+          sub="Loading…"
+        />
+        <div className="fmb-qf-shell">
+          <div className="fmb-qf-main">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="fmb-qf-skel" style={{ height: 180 }} />
+            ))}
+          </div>
+          <div className="fmb-qf-skel" style={{ height: 260 }} />
+        </div>
       </div>
     );
   }
 
-  if (!survey) {
-    return <div className="loading">Loading…</div>;
+  if (loadError) {
+    return (
+      <div className="fmb-qf-page" data-testid="questionform-load-error">
+        <PageHeader
+          eyebrow={surveyId || undefined}
+          title={isEdit ? 'Edit Question' : 'Add New Question'}
+          sub="We couldn't load this question."
+          actions={
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={backToQuestions}
+            >
+              <Icon name="chevronLeft" /> Back to Questions
+            </button>
+          }
+        />
+        <div className="fmb-qf-error-banner" role="alert">
+          <div><span className="fmb-qf-error-banner-title">Error: </span>{loadError}</div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="form-container">
-      <div className="form-header">
-        <h2>{isEdit ? 'Edit Question' : 'Add New Question'}</h2>
-        <button
-          className="btn btn-secondary btn-cta btn-icon-back"
-          onClick={() => navigate(`/surveys/${surveyId}/questions`)}
-        >
-          Back to Questions
-        </button>
-      </div>
+    <div className="fmb-qf-page">
+      <PageHeader
+        eyebrow={surveyId || undefined}
+        title={isEdit ? 'Edit Question' : 'Add New Question'}
+        sub={isEdit
+          ? 'Update the question content, options, translations, and behavior.'
+          : 'Define a new question for this survey. Add options, translations, and behavior settings as needed.'}
+        actions={
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={backToQuestions}
+          >
+            <Icon name="chevronLeft" /> Back to Questions
+          </button>
+        }
+      />
 
-      {submitError && (
-        <div className="error-message">
-          <strong>Error:</strong> {submitError}
-        </div>
-      )}
-
-      {Object.keys(errors).length > 0 && (
-        <div className="error-message">
-          <strong>Please fix the following errors:</strong>
-          <ul style={{ margin: '0.5rem 0 0 1.5rem' }}>
-            {Object.entries(errors).map(([field, message]) => (
-              <li key={field}>{message}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="question-form">
-
-        {/* ── BASIC INFORMATION ── */}
-        <div className="form-section">
-          <h3>Basic Information</h3>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="questionId">
-                Question ID <span className="required">*</span>
-              </label>
-              <input
-                type="text"
-                id="questionId"
-                name="questionId"
-                value={formData.questionId}
-                onChange={handleChange}
-                disabled={isEdit}
-                placeholder="e.g., 1, 1.1, 2"
-                className={errors.questionId ? 'error' : ''}
-              />
-              {errors.questionId && <span className="error-text">{errors.questionId}</span>}
-              <small>Format: 1, 2, or 1.1 for child questions (saved as Q1, Q1.1)</small>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="questionType">
-                Question Type <span className="required">*</span>
-              </label>
-              <select
-                id="questionType"
-                name="questionType"
-                value={formData.questionType}
-                onChange={handleChange}
-                className={errors.questionType ? 'error' : ''}
-              >
-                <option value="">Select Question Type</option>
-                {questionTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              {errors.questionType && <span className="error-text">{errors.questionType}</span>}
-            </div>
-          </div>
-
-          {surveyLanguages.length > 0 && (
-            <div className="survey-languages-hint">
-              <strong>Survey languages:</strong> {surveyLanguages.join(', ')}
-              {nonEnglishLanguages.length > 0 && (
-                <span className="ms-1">— Enter English content below, then add translations in the <em>Translations</em> section.</span>
-              )}
+      {(submitError || Object.keys(errors).length > 0) && (
+        <div className="fmb-qf-error-banner" role="alert">
+          {submitError && (
+            <div>
+              <span className="fmb-qf-error-banner-title">Error: </span>{submitError}
             </div>
           )}
+          {Object.keys(errors).length > 0 && (
+            <div data-testid="qf-error-summary">
+              <div className="fmb-qf-error-banner-title">Please fix the following errors:</div>
+              <ul>
+                {Object.entries(errors).map(([field, message]) => (
+                  <li key={field}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
-          <div className="form-group">
-            <label htmlFor="questionDescription">
-              Question Description {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
-            </label>
-            <textarea
-              id="questionDescription"
-              name="questionDescription"
-              value={formData.questionDescription}
-              onChange={handleChange}
-              rows="3"
-              placeholder="Enter question text in English"
-              className={errors.questionDescription ? 'error' : ''}
-            />
-            {errors.questionDescription && <span className="error-text">{errors.questionDescription}</span>}
-          </div>
+      <form onSubmit={handleSubmit} noValidate>
+        <div className="fmb-qf-shell">
+          {/* ── Left column: section cards ───────────────────── */}
+          <div className="fmb-qf-main">
 
-          <div className="form-group">
-            <label htmlFor="questionDescriptionOptional">Question Description Optional</label>
-            <input
-              type="text"
-              id="questionDescriptionOptional"
-              name="questionDescriptionOptional"
-              value={formData.questionDescriptionOptional}
-              onChange={handleChange}
-              maxLength="256"
-              placeholder="Optional description (max 256 characters)"
-            />
-          </div>
+            {/* Content */}
+            <section className="fmb-qf-section" aria-labelledby="qf-content-h">
+              <header className="fmb-qf-section-head">
+                <h3 id="qf-content-h" className="fmb-qf-section-title">Content</h3>
+                <p className="fmb-qf-section-sub">
+                  The question's identifier, type, and primary text. Use the
+                  format <span className="fmb-qf-mono">1, 2, or 1.1</span> for
+                  IDs — they're saved as <span className="fmb-qf-mono">Q1, Q1.1</span>.
+                </p>
+              </header>
 
-          {fieldConfig.showTableFields && (
-            <>
-              <div className="form-group">
-                <label>
-                  Table Headers {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
-                </label>
-                <div className="form-row" style={{ gap: '0.75rem' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <input
-                      type="text"
-                      value={tableHeaders[0]}
-                      onChange={(e) => handleTableHeaderChange(0, e.target.value)}
-                      placeholder="Header 1 (e.g., Criteria)"
-                      className={errors.tableHeaderValue ? 'error' : ''}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <input
-                      type="text"
-                      value={tableHeaders[1]}
-                      onChange={(e) => handleTableHeaderChange(1, e.target.value)}
-                      placeholder="Header 2 (e.g., Value)"
-                      className={errors.tableHeaderValue ? 'error' : ''}
-                    />
-                  </div>
+              <div className="fmb-qf-grid cols-2">
+                <div className="fmb-qf-field">
+                  <label htmlFor="questionId" className="fmb-qf-field-label">
+                    Question ID <span className="fmb-qf-field-required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="questionId"
+                    name="questionId"
+                    value={formData.questionId}
+                    onChange={handleChange}
+                    disabled={isEdit}
+                    placeholder="e.g., 1, 1.1, 2"
+                    className="fmb-qf-field-input fmb-qf-mono"
+                    aria-invalid={errors.questionId ? 'true' : 'false'}
+                  />
+                  {errors.questionId && <div className="fmb-qf-field-error">{errors.questionId}</div>}
+                  <p className="fmb-qf-field-help">Format: 1, 2, or 1.1 for child questions (saved as Q1, Q1.1)</p>
                 </div>
-                {errors.tableHeaderValue && <span className="error-text">{errors.tableHeaderValue}</span>}
+
+                <div className="fmb-qf-field">
+                  <label htmlFor="questionType" className="fmb-qf-field-label">
+                    Question Type <span className="fmb-qf-field-required">*</span>
+                  </label>
+                  <select
+                    id="questionType"
+                    name="questionType"
+                    value={formData.questionType}
+                    onChange={handleChange}
+                    className="fmb-qf-field-select"
+                    aria-invalid={errors.questionType ? 'true' : 'false'}
+                  >
+                    <option value="">Select Question Type</option>
+                    {questionTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                  {errors.questionType && <div className="fmb-qf-field-error">{errors.questionType}</div>}
+                </div>
               </div>
 
-              <div className="form-group">
-                <label>
-                  Table Questions {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="required">*</span>
+              {surveyLanguages.length > 0 && (
+                <div className="fmb-qf-lang-hint">
+                  <strong>Survey languages:</strong> {surveyLanguages.join(', ')}
+                  {nonEnglishLanguages.length > 0 && (
+                    <span style={{ marginLeft: 4 }}>— Enter English content below, then add translations in the <em>Translations</em> section.</span>
+                  )}
+                </div>
+              )}
+
+              <div className="fmb-qf-field">
+                <label htmlFor="questionDescription" className="fmb-qf-field-label">
+                  Question Description {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="fmb-qf-field-required">*</span>
                 </label>
-                {errors.tableQuestionValue && <span className="error-text">{errors.tableQuestionValue}</span>}
-                <div className="options-table" style={{ marginTop: '0.5rem' }}>
-                  <div className="options-table-row options-table-header">
-                    <div className="options-table-cell" style={{ width: '2.5rem', flexShrink: 0 }}>#</div>
-                    <div className="options-table-cell">Row Question {nonEnglishLanguages.length > 0 ? '(English)' : ''}</div>
-                    <div className="options-table-cell options-table-label">Action</div>
-                  </div>
-                  {tableQuestions.map((tq, index) => (
-                    <div className="options-table-row" key={`tq-${index}`}>
-                      <div className="options-table-cell table-row-label-col">
-                        <span className="table-row-label">{getRowLabel(index)}</span>
-                      </div>
-                      <div className="options-table-cell">
+                <textarea
+                  id="questionDescription"
+                  name="questionDescription"
+                  value={formData.questionDescription}
+                  onChange={handleChange}
+                  rows="3"
+                  placeholder="Enter question text in English"
+                  className="fmb-qf-field-textarea"
+                  aria-invalid={errors.questionDescription ? 'true' : 'false'}
+                />
+                {errors.questionDescription && <div className="fmb-qf-field-error">{errors.questionDescription}</div>}
+              </div>
+
+              <div className="fmb-qf-field">
+                <label htmlFor="questionDescriptionOptional" className="fmb-qf-field-label">Question Description Optional</label>
+                <input
+                  type="text"
+                  id="questionDescriptionOptional"
+                  name="questionDescriptionOptional"
+                  value={formData.questionDescriptionOptional}
+                  onChange={handleChange}
+                  maxLength="256"
+                  placeholder="Optional description (max 256 characters)"
+                  className="fmb-qf-field-input"
+                />
+              </div>
+
+              {fieldConfig.showTableFields && (
+                <>
+                  <div className="fmb-qf-field">
+                    <span className="fmb-qf-field-label">
+                      Table Headers {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="fmb-qf-field-required">*</span>
+                    </span>
+                    <div className="fmb-qf-table-headers">
+                      <div className="fmb-qf-table-headers-cell">
+                        <span className="fmb-qf-table-headers-cell-label">Column 1</span>
                         <input
                           type="text"
-                          value={tq.text}
-                          onChange={(e) => handleTableQuestionChange(index, e.target.value)}
-                          placeholder={`Row ${index + 1} question`}
+                          value={tableHeaders[0]}
+                          onChange={(e) => handleTableHeaderChange(0, e.target.value)}
+                          placeholder="Header 1 (e.g., Criteria)"
+                          className="fmb-qf-field-input"
+                          aria-invalid={errors.tableHeaderValue ? 'true' : 'false'}
+                          aria-label="Table header 1"
                         />
                       </div>
-                      <div className="options-table-cell">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-danger"
-                          onClick={() => removeTableQuestion(index)}
-                          disabled={tableQuestions.length <= 1}
-                        >
-                          Remove
-                        </button>
+                      <div className="fmb-qf-table-headers-cell">
+                        <span className="fmb-qf-table-headers-cell-label">Column 2</span>
+                        <input
+                          type="text"
+                          value={tableHeaders[1]}
+                          onChange={(e) => handleTableHeaderChange(1, e.target.value)}
+                          placeholder="Header 2 (e.g., Value)"
+                          className="fmb-qf-field-input"
+                          aria-invalid={errors.tableHeaderValue ? 'true' : 'false'}
+                          aria-label="Table header 2"
+                        />
                       </div>
                     </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: '0.625rem' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={addTableQuestion}
-                    disabled={tableQuestions.length >= TABLE_QUESTION_MAX}
-                  >
-                    Add Row ({tableQuestions.length}/{TABLE_QUESTION_MAX})
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* ── OPTIONS (English) ── */}
-        {fieldConfig.showOptions && (
-          <div className="form-section">
-            <h3>Options {nonEnglishLanguages.length > 0 ? '(English)' : ''}</h3>
-            {errors.options && <span className="error-text">{errors.options}</span>}
-
-            <div className="options-table" style={{ marginTop: '0.625rem' }}>
-              <div className="options-table-row options-table-header">
-                <div className="options-table-cell options-table-label">
-                  Option Text {nonEnglishLanguages.length > 0 ? '(English)' : ''}
-                </div>
-                {fieldConfig.showOptionChildren && (
-                  <div className="options-table-cell options-table-label">Child Questions</div>
-                )}
-                <div className="options-table-cell options-table-label">Action</div>
-              </div>
-
-              {(formData.options || []).map((option, index) => (
-                <div className="options-table-row" key={`option-${index}`}>
-                  <div className="options-table-cell">
-                    <input
-                      type="text"
-                      value={option?.text || ''}
-                      onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
-                      placeholder={`Option ${index + 1}`}
-                    />
+                    {errors.tableHeaderValue && <div className="fmb-qf-field-error">{errors.tableHeaderValue}</div>}
                   </div>
-                  {fieldConfig.showOptionChildren && (
-                    <div className="options-table-cell">
-                      <input
-                        type="text"
-                        className="options-table-child-input"
-                        value={option?.children || ''}
-                        onFocus={(e) => handleChildFocus(e, index)}
-                        onChange={(e) => handleChildChange(e, index)}
-                        placeholder={childAutoPrefix
-                          ? `e.g., ${childAutoPrefix}1, ${childAutoPrefix}2`
-                          : 'e.g., 1.1, 1.2'}
-                      />
+
+                  <div className="fmb-qf-field">
+                    <span className="fmb-qf-field-label">
+                      Table Questions {nonEnglishLanguages.length > 0 ? '(English)' : ''} <span className="fmb-qf-field-required">*</span>
+                    </span>
+                    {errors.tableQuestionValue && <div className="fmb-qf-field-error">{errors.tableQuestionValue}</div>}
+
+                    <div className="fmb-qf-row-legend tableq" aria-hidden="true">
+                      <span className="fmb-qf-row-legend-spacer" />
+                      <span>Row question {nonEnglishLanguages.length > 0 ? '(English)' : ''}</span>
+                      <span className="fmb-qf-row-legend-spacer" />
                     </div>
-                  )}
-                  <div className="options-table-cell">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-danger"
-                      onClick={() => removeOption(index)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
 
-            <div className="options-section" style={{ marginTop: '0.625rem' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={addOption}
-                disabled={(formData.options || []).length >= (fieldConfig?.maxOptions || 20)}
-              >
-                Add Option ({(formData.options || []).length}/{fieldConfig?.maxOptions || 20})
-              </button>
-            </div>
-          </div>
-        )}
+                    <div className="fmb-qf-rows">
+                      {tableQuestions.map((tq, index) => (
+                        <div
+                          key={`tq-${index}`}
+                          className="fmb-qf-row tableq"
+                          data-testid="qf-table-row"
+                          data-index={index}
+                        >
+                          <span className="fmb-qf-row-num" aria-hidden="true">{getRowLabel(index)}</span>
 
-        {/* ── TRANSLATIONS ── */}
-        {nonEnglishLanguages.length > 0 && (
-          <div className="form-section">
-            <h3>Translations</h3>
-            <p className="translation-section-hint">
-              Provide the question content in other survey languages below.
-            </p>
-
-            {nonEnglishLanguages.map(lang => (
-              <div key={lang} className="translation-lang-card">
-                <div className="translation-lang-header">
-                  <div className="translation-lang-title">
-                    <strong>{lang}</strong>
-                    <span className="translation-native-script">({getNativeScript(lang)})</span>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label>Description in {lang}</label>
-                  <textarea
-                    value={langTranslations[lang]?.questionDescription || ''}
-                    onChange={(e) => handleTranslationChange(lang, 'questionDescription', e.target.value)}
-                    rows="3"
-                    placeholder={`Question text in ${lang}…`}
-                  />
-                </div>
-
-                {fieldConfig.showTableFields && (
-                  <>
-                    <div className="form-group">
-                      <label>Table Headers in {lang}</label>
-                      <div className="form-row" style={{ gap: '0.75rem' }}>
-                        {[0, 1].map(idx => (
-                          <div key={idx} className="form-group" style={{ marginBottom: 0 }}>
+                          <div className="fmb-qf-row-field">
+                            <span className="fmb-qf-row-inline-label">
+                              Row {index + 1} question {nonEnglishLanguages.length > 0 ? '(English)' : ''}
+                            </span>
                             <input
                               type="text"
-                              value={langTranslations[lang]?.tableHeaders?.[idx] || ''}
-                              onChange={(e) => handleTranslationTableHeaderChange(lang, idx, e.target.value)}
-                              placeholder={tableHeaders[idx] ? `"${tableHeaders[idx]}" in ${lang}` : `Header ${idx + 1} in ${lang}…`}
+                              value={tq.text}
+                              onChange={(e) => handleTableQuestionChange(index, e.target.value)}
+                              placeholder={`Row ${index + 1} question`}
+                              className="fmb-qf-row-input"
+                              aria-label={`Row ${index + 1} question text`}
                             />
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                    {tableQuestions.length > 0 && (
-                      <div className="form-group">
-                        <label>Table Questions in {lang}</label>
-                        <div className="translation-options-grid">
-                          <div className="translation-options-header">
-                            <span>English</span>
-                            <span>{lang} ({getNativeScript(lang)})</span>
-                          </div>
-                          {tableQuestions.map((tq, i) => (
-                            <div key={i} className="translation-option-row">
-                              <span className="translation-option-source">
-                                <span className="table-row-label" style={{ marginRight: '0.375rem' }}>{getRowLabel(i)}</span>
-                                {tq.text || <em style={{ opacity: 0.5 }}>Row {i + 1}</em>}
-                              </span>
-                              <input
-                                type="text"
-                                value={langTranslations[lang]?.tableQuestions?.[i]?.text || ''}
-                                onChange={(e) => handleTranslationTableQuestionChange(lang, i, e.target.value)}
-                                placeholder={`${lang} translation`}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
 
-                {fieldConfig.showOptions && (formData.options || []).length > 0 && (
-                  <div className="form-group">
-                    <label>Options in {lang}</label>
-                    <div className="translation-options-grid">
-                      <div className="translation-options-header">
-                        <span>English</span>
-                        <span>{lang} ({getNativeScript(lang)})</span>
-                      </div>
-                      {(formData.options || []).map((opt, i) => (
-                        <div key={i} className="translation-option-row">
-                          <span className="translation-option-source">
-                            {opt.text || <em style={{ opacity: 0.5 }}>Option {i + 1}</em>}
-                          </span>
-                          <input
-                            type="text"
-                            value={langTranslations[lang]?.options?.[i]?.text || ''}
-                            onChange={(e) => handleTranslationOptionChange(lang, i, e.target.value)}
-                            placeholder={`${lang} translation`}
-                          />
+                          <button
+                            type="button"
+                            className="fmb-qf-row-remove"
+                            onClick={() => removeTableQuestion(index)}
+                            disabled={tableQuestions.length <= 1}
+                            aria-label="Remove"
+                            title={tableQuestions.length <= 1 ? 'At least one row is required' : 'Remove row'}
+                          >
+                            <Icon name="x" size={14} />
+                            <span className="fmb-qf-row-remove-text">Remove</span>
+                          </button>
                         </div>
                       ))}
                     </div>
+
+                    <div className="fmb-qf-rows-toolbar">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={addTableQuestion}
+                        disabled={tableQuestions.length >= TABLE_QUESTION_MAX}
+                      >
+                        <Icon name="plus" size={14} /> Add Row
+                      </button>
+                      <span className="fmb-qf-rows-meta">
+                        {tableQuestions.length} of {TABLE_QUESTION_MAX}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── SETTINGS ── */}
-        <div className="form-section">
-          <h3>Settings</h3>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="isMandatory">Is Mandatory</label>
-              <select
-                id="isMandatory"
-                name="isMandatory"
-                value={formData.isMandatory}
-                onChange={handleChange}
-                disabled={mandatoryLockedByParent}
-                className={errors.isMandatory ? 'error' : ''}
-              >
-                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-              {mandatoryLockedByParent && (
-                <small>Disabled: {mandatoryLockReason}</small>
+                </>
               )}
-              {errors.isMandatory && <span className="error-text">{errors.isMandatory}</span>}
-            </div>
+            </section>
 
-            <div className="form-group">
-              <label htmlFor="isDynamic">Is Dynamic</label>
-              <select
-                id="isDynamic"
-                name="isDynamic"
-                value={formData.isDynamic}
-                onChange={handleChange}
-                disabled={fieldConfig.isDynamic !== undefined}
-              >
-                {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-              {fieldConfig.isDynamic !== undefined && <small>Auto-set based on question type</small>}
-            </div>
+            {/* Options (English) — Phase 8C card-row redesign */}
+            {fieldConfig.showOptions && (
+              <section className="fmb-qf-section" aria-labelledby="qf-options-h">
+                <header className="fmb-qf-section-head">
+                  <h3 id="qf-options-h" className="fmb-qf-section-title">
+                    Options {nonEnglishLanguages.length > 0 ? '(English)' : ''}
+                  </h3>
+                  <p className="fmb-qf-section-sub">
+                    The list of choices respondents pick from.
+                    {fieldConfig.showOptionChildren && ' Each option may map to a child question by entering its Question ID below.'}
+                  </p>
+                </header>
+                {errors.options && <div className="fmb-qf-field-error">{errors.options}</div>}
 
-            <div className="form-group">
-              <label htmlFor="mode">Mode</label>
-              <select id="mode" name="mode" value={formData.mode} onChange={handleChange}>
-                <option value="None">None</option>
-                <option value="New Data">New Data</option>
-                <option value="Correction">Correction</option>
-                <option value="Delete Data">Delete Data</option>
-              </select>
-            </div>
-          </div>
-
-          {fieldConfig.showTextInputType && (
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="textInputType">Text Input Type</label>
-                <select
-                  id="textInputType"
-                  name="textInputType"
-                  value={formData.textInputType}
-                  onChange={handleChange}
-                  disabled={Boolean(fieldConfig.textInputTypeValue)}
+                {/* Column legend — always rendered (even when 0 options) so the
+                    lock-in test `getByText('Child Questions')` always resolves. */}
+                <div
+                  className={`fmb-qf-row-legend ${fieldConfig.showOptionChildren ? 'with-children' : 'text-only'}`}
+                  aria-hidden="true"
                 >
-                  {textInputTypes.map(type => <option key={type} value={type}>{type}</option>)}
-                </select>
+                  <span className="fmb-qf-row-legend-spacer" />
+                  <span>Option text {nonEnglishLanguages.length > 0 ? '(English)' : ''}</span>
+                  {fieldConfig.showOptionChildren && <span>Child Questions</span>}
+                  <span className="fmb-qf-row-legend-spacer" />
+                </div>
+
+                <div className="fmb-qf-rows">
+                  {(formData.options || []).length === 0 ? (
+                    <div className="fmb-qf-rows-empty">
+                      No options yet. Click <strong>Add Option</strong> to create the first one.
+                    </div>
+                  ) : (
+                    (formData.options || []).map((option, index) => (
+                      <div
+                        key={`option-${index}`}
+                        className={`fmb-qf-row ${fieldConfig.showOptionChildren ? 'with-children' : 'text-only'}`}
+                        data-testid="qf-option-row"
+                        data-index={index}
+                      >
+                        <span className="fmb-qf-row-num" aria-hidden="true">{index + 1}</span>
+
+                        <div className="fmb-qf-row-field">
+                          <span className="fmb-qf-row-inline-label">
+                            Option text {nonEnglishLanguages.length > 0 ? '(English)' : ''}
+                          </span>
+                          <input
+                            type="text"
+                            value={option?.text || ''}
+                            onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
+                            placeholder={`Option ${index + 1}`}
+                            className="fmb-qf-row-input"
+                            aria-label={`Option ${index + 1} text`}
+                          />
+                        </div>
+
+                        {fieldConfig.showOptionChildren && (
+                          <div className="fmb-qf-row-field">
+                            <span className="fmb-qf-row-inline-label">Child Questions</span>
+                            <input
+                              type="text"
+                              value={option?.children || ''}
+                              onFocus={(e) => handleChildFocus(e, index)}
+                              onChange={(e) => handleChildChange(e, index)}
+                              placeholder={childAutoPrefix
+                                ? `e.g., ${childAutoPrefix}1, ${childAutoPrefix}2`
+                                : 'e.g., 1.1, 1.2'}
+                              className="fmb-qf-row-input is-mono"
+                              aria-label={`Option ${index + 1} children`}
+                            />
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          className="fmb-qf-row-remove"
+                          onClick={() => removeOption(index)}
+                          aria-label="Remove"
+                          title="Remove option"
+                        >
+                          <Icon name="x" size={14} />
+                          <span className="fmb-qf-row-remove-text">Remove</span>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="fmb-qf-rows-toolbar">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={addOption}
+                    disabled={(formData.options || []).length >= (fieldConfig?.maxOptions || 20)}
+                  >
+                    <Icon name="plus" size={14} /> Add Option
+                  </button>
+                  <span className="fmb-qf-rows-meta">
+                    {(formData.options || []).length} of {fieldConfig?.maxOptions || 20}
+                  </span>
+                </div>
+              </section>
+            )}
+
+            {/* Translations — Phase 8D card redesign */}
+            {nonEnglishLanguages.length > 0 && (
+              <section className="fmb-qf-section" aria-labelledby="qf-translations-h">
+                <header className="fmb-qf-section-head">
+                  <h3 id="qf-translations-h" className="fmb-qf-section-title">Translations</h3>
+                  <p className="fmb-qf-section-sub">
+                    Translate respondent-facing text for each non-English survey
+                    language. Auto-translate isn't wired yet — enter each value
+                    manually for now.
+                  </p>
+                </header>
+
+                {nonEnglishLanguages.map(lang => {
+                  const langData = langTranslations[lang] || {};
+                  const descFilled = (langData.questionDescription || '').trim() !== '';
+
+                  const headersTotal = fieldConfig.showTableFields ? 2 : 0;
+                  const headersFilled = fieldConfig.showTableFields
+                    ? [0, 1].filter(i => (langData.tableHeaders?.[i] || '').trim() !== '').length
+                    : 0;
+
+                  const rowsTotal = fieldConfig.showTableFields ? tableQuestions.length : 0;
+                  const rowsFilled = fieldConfig.showTableFields
+                    ? (langData.tableQuestions || []).filter(t => (t?.text || '').trim() !== '').length
+                    : 0;
+
+                  const optsTotal = fieldConfig.showOptions ? (formData.options || []).length : 0;
+                  const optsFilled = fieldConfig.showOptions
+                    ? (langData.options || []).filter(o => (o?.text || '').trim() !== '').length
+                    : 0;
+
+                  const filled = (descFilled ? 1 : 0) + headersFilled + rowsFilled + optsFilled;
+                  const total = 1 + headersTotal + rowsTotal + optsTotal;
+
+                  const progressClass =
+                    total === 0
+                      ? ''
+                      : filled === 0
+                        ? 'empty'
+                        : filled === total
+                          ? 'complete'
+                          : '';
+
+                  return (
+                    <div
+                      key={lang}
+                      className="fmb-qf-trans-card"
+                      data-testid="qf-lang-card"
+                      data-lang={lang}
+                    >
+                      <header className="fmb-qf-trans-head">
+                        <div className="fmb-qf-trans-head-name">
+                          <span className="fmb-qf-trans-lang">{lang}</span>
+                          <span className="fmb-qf-trans-script">({getNativeScript(lang)})</span>
+                        </div>
+                        <span
+                          className={`fmb-qf-trans-progress ${progressClass}`}
+                          data-testid={`qf-lang-progress-${lang}`}
+                          aria-label={`${filled} of ${total} translation fields complete`}
+                        >
+                          {filled}/{total}
+                          <span style={{ textTransform: 'uppercase', opacity: 0.7 }}>
+                            {filled === total ? ' done' : filled === 0 ? ' empty' : ' in progress'}
+                          </span>
+                        </span>
+                        <p className="fmb-qf-trans-sub">
+                          Translate respondent-facing text for this language.
+                        </p>
+                      </header>
+
+                      <div className="fmb-qf-trans-body">
+                        {/* Question description */}
+                        <div className="fmb-qf-field">
+                          <label
+                            htmlFor={`qf-trans-${lang}-desc`}
+                            className="fmb-qf-field-label"
+                          >
+                            Question text ({lang})
+                          </label>
+                          <textarea
+                            id={`qf-trans-${lang}-desc`}
+                            value={langData.questionDescription || ''}
+                            onChange={(e) => handleTranslationChange(lang, 'questionDescription', e.target.value)}
+                            rows="3"
+                            placeholder={`Question text in ${lang}…`}
+                            className="fmb-qf-field-textarea"
+                          />
+                        </div>
+
+                        {/* Table headers translations */}
+                        {fieldConfig.showTableFields && (
+                          <div className="fmb-qf-field">
+                            <span className="fmb-qf-field-label">Table headers ({lang})</span>
+                            <div className="fmb-qf-table-headers">
+                              {[0, 1].map(idx => (
+                                <div key={idx} className="fmb-qf-table-headers-cell">
+                                  <span className="fmb-qf-table-headers-cell-label">
+                                    Column {idx + 1} {tableHeaders[idx] ? `· ${tableHeaders[idx]}` : ''}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={langData.tableHeaders?.[idx] || ''}
+                                    onChange={(e) => handleTranslationTableHeaderChange(lang, idx, e.target.value)}
+                                    placeholder={tableHeaders[idx] ? `"${tableHeaders[idx]}" in ${lang}` : `Header ${idx + 1} in ${lang}…`}
+                                    className="fmb-qf-field-input"
+                                    aria-label={`Table header ${idx + 1} in ${lang}`}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Table-question translations */}
+                        {fieldConfig.showTableFields && tableQuestions.length > 0 && (
+                          <div className="fmb-qf-field">
+                            <span className="fmb-qf-field-label">Row translations ({lang})</span>
+                            <div className="fmb-qf-row-legend trans" aria-hidden="true">
+                              <span className="fmb-qf-row-legend-spacer" />
+                              <span>Source (English)</span>
+                              <span>{lang} ({getNativeScript(lang)})</span>
+                            </div>
+                            <div className="fmb-qf-rows">
+                              {tableQuestions.map((tq, i) => {
+                                const sourceText = (tq?.text || '').trim();
+                                return (
+                                  <div key={i} className="fmb-qf-row trans">
+                                    <span className="fmb-qf-row-num" aria-hidden="true">{getRowLabel(i)}</span>
+                                    <div
+                                      className={`fmb-qf-trans-source${sourceText ? '' : ' placeholder'}`}
+                                      title={sourceText || `Row ${i + 1} (untranslated source)`}
+                                    >
+                                      {sourceText || <em>Row {i + 1}</em>}
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={langData.tableQuestions?.[i]?.text || ''}
+                                      onChange={(e) => handleTranslationTableQuestionChange(lang, i, e.target.value)}
+                                      placeholder={`${lang} translation`}
+                                      className="fmb-qf-row-input"
+                                      aria-label={`Row ${i + 1} translation in ${lang}`}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Option translations */}
+                        {fieldConfig.showOptions && (formData.options || []).length > 0 && (
+                          <div className="fmb-qf-field">
+                            <span className="fmb-qf-field-label">Option translations ({lang})</span>
+                            <div className="fmb-qf-row-legend trans" aria-hidden="true">
+                              <span className="fmb-qf-row-legend-spacer" />
+                              <span>Source (English)</span>
+                              <span>{lang} ({getNativeScript(lang)})</span>
+                            </div>
+                            <div className="fmb-qf-rows">
+                              {(formData.options || []).map((opt, i) => {
+                                const sourceText = (opt?.text || '').trim();
+                                return (
+                                  <div key={i} className="fmb-qf-row trans">
+                                    <span className="fmb-qf-row-num" aria-hidden="true">{i + 1}</span>
+                                    <div
+                                      className={`fmb-qf-trans-source${sourceText ? '' : ' placeholder'}`}
+                                      title={sourceText || `Option ${i + 1} (untranslated source)`}
+                                    >
+                                      {sourceText || <em>Option {i + 1}</em>}
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={langData.options?.[i]?.text || ''}
+                                      onChange={(e) => handleTranslationOptionChange(lang, i, e.target.value)}
+                                      placeholder={`${lang} translation`}
+                                      className="fmb-qf-row-input"
+                                      aria-label={`Option ${i + 1} translation in ${lang}`}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </section>
+            )}
+
+            {/* Settings */}
+            <section className="fmb-qf-section" aria-labelledby="qf-settings-h">
+              <header className="fmb-qf-section-head">
+                <h3 id="qf-settings-h" className="fmb-qf-section-title">Settings</h3>
+                <p className="fmb-qf-section-sub">
+                  Behavior, validation rules, and optional media for this question.
+                </p>
+              </header>
+
+              <div className="fmb-qf-grid cols-3">
+                <div className="fmb-qf-field">
+                  <label htmlFor="isMandatory" className="fmb-qf-field-label">Is Mandatory</label>
+                  <select
+                    id="isMandatory"
+                    name="isMandatory"
+                    value={formData.isMandatory}
+                    onChange={handleChange}
+                    disabled={mandatoryLockedByParent}
+                    className="fmb-qf-field-select"
+                    aria-invalid={errors.isMandatory ? 'true' : 'false'}
+                    aria-describedby={mandatoryLockedByParent ? 'isMandatory-lock-note' : undefined}
+                  >
+                    {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                  {mandatoryLockedByParent && (
+                    <p id="isMandatory-lock-note" className="fmb-qf-lock-note">Disabled: {mandatoryLockReason}</p>
+                  )}
+                  {errors.isMandatory && <div className="fmb-qf-field-error">{errors.isMandatory}</div>}
+                </div>
+
+                <div className="fmb-qf-field">
+                  <label htmlFor="isDynamic" className="fmb-qf-field-label">Is Dynamic</label>
+                  <select
+                    id="isDynamic"
+                    name="isDynamic"
+                    value={formData.isDynamic}
+                    onChange={handleChange}
+                    disabled={fieldConfig.isDynamic !== undefined}
+                    className="fmb-qf-field-select"
+                  >
+                    {yesNoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                  {fieldConfig.isDynamic !== undefined && <p className="fmb-qf-field-help">Auto-set based on question type</p>}
+                </div>
+
+                <div className="fmb-qf-field">
+                  <label htmlFor="mode" className="fmb-qf-field-label">Mode</label>
+                  <select
+                    id="mode"
+                    name="mode"
+                    value={formData.mode}
+                    onChange={handleChange}
+                    className="fmb-qf-field-select"
+                  >
+                    <option value="None">None</option>
+                    <option value="New Data">New Data</option>
+                    <option value="Correction">Correction</option>
+                    <option value="Delete Data">Delete Data</option>
+                  </select>
+                </div>
               </div>
 
-              {fieldConfig.showTextLimit && (
-                <div className="form-group">
-                  <label htmlFor="textLimitCharacters">Text Limit (Characters)</label>
-                  <input
-                    type="number"
-                    id="textLimitCharacters"
-                    name="textLimitCharacters"
-                    value={formData.textLimitCharacters}
-                    onChange={handleChange}
-                    placeholder="Default: 1024"
-                  />
+              {fieldConfig.showTextInputType && (
+                <div className="fmb-qf-grid cols-2">
+                  <div className="fmb-qf-field">
+                    <label htmlFor="textInputType" className="fmb-qf-field-label">Text Input Type</label>
+                    <select
+                      id="textInputType"
+                      name="textInputType"
+                      value={formData.textInputType}
+                      onChange={handleChange}
+                      disabled={Boolean(fieldConfig.textInputTypeValue)}
+                      className="fmb-qf-field-select"
+                    >
+                      {textInputTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </div>
+
+                  {fieldConfig.showTextLimit && (
+                    <div className="fmb-qf-field">
+                      <label htmlFor="textLimitCharacters" className="fmb-qf-field-label">Text Limit (Characters)</label>
+                      <input
+                        type="number"
+                        id="textLimitCharacters"
+                        name="textLimitCharacters"
+                        value={formData.textLimitCharacters}
+                        onChange={handleChange}
+                        placeholder="Default: 1024"
+                        className="fmb-qf-field-input"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          {fieldConfig.showMaxMin && (
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="minValue">Min Value</label>
-                <input type="text" id="minValue" name="minValue" value={formData.minValue} onChange={handleChange} placeholder="Minimum value" />
-              </div>
-              <div className="form-group">
-                <label htmlFor="maxValue">Max Value</label>
-                <input type="text" id="maxValue" name="maxValue" value={formData.maxValue} onChange={handleChange} placeholder="Maximum value" />
-              </div>
-            </div>
-          )}
+              {fieldConfig.showMaxMin && (
+                <div className="fmb-qf-grid cols-2">
+                  <div className="fmb-qf-field">
+                    <label htmlFor="minValue" className="fmb-qf-field-label">Min Value</label>
+                    <input
+                      type="text"
+                      id="minValue"
+                      name="minValue"
+                      value={formData.minValue}
+                      onChange={handleChange}
+                      placeholder="Minimum value"
+                      className="fmb-qf-field-input"
+                    />
+                  </div>
+                  <div className="fmb-qf-field">
+                    <label htmlFor="maxValue" className="fmb-qf-field-label">Max Value</label>
+                    <input
+                      type="text"
+                      id="maxValue"
+                      name="maxValue"
+                      value={formData.maxValue}
+                      onChange={handleChange}
+                      placeholder="Maximum value"
+                      className="fmb-qf-field-input"
+                      aria-invalid={errors.maxValue ? 'true' : 'false'}
+                    />
+                  </div>
+                </div>
+              )}
 
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="questionMediaType">Question Media Type</label>
-              <select
-                id="questionMediaType"
-                name="questionMediaType"
-                value={formData.questionMediaType}
-                onChange={handleChange}
-                disabled={Boolean(fieldConfig.questionMediaTypeValue)}
+              <div className="fmb-qf-grid cols-2">
+                <div className="fmb-qf-field">
+                  <label htmlFor="questionMediaType" className="fmb-qf-field-label">Question Media Type</label>
+                  <select
+                    id="questionMediaType"
+                    name="questionMediaType"
+                    value={formData.questionMediaType}
+                    onChange={handleChange}
+                    disabled={Boolean(fieldConfig.questionMediaTypeValue)}
+                    className="fmb-qf-field-select"
+                  >
+                    {questionMediaTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </div>
+
+                <div className="fmb-qf-field">
+                  <label htmlFor="questionMediaLink" className="fmb-qf-field-label">Question Media Link</label>
+                  <input
+                    type="text"
+                    id="questionMediaLink"
+                    name="questionMediaLink"
+                    value={formData.questionMediaLink}
+                    onChange={handleChange}
+                    placeholder="URL to media file"
+                    disabled={formData.questionMediaType === 'None'}
+                    className="fmb-qf-field-input"
+                  />
+                  {formData.questionMediaType === 'None' && <p className="fmb-qf-field-help">Disabled when Media Type is None</p>}
+                </div>
+              </div>
+            </section>
+
+            {/* Form actions */}
+            <div className="fmb-qf-actions">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={backToQuestions}
+                disabled={loading}
               >
-                {questionMediaTypes.map(type => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="questionMediaLink">Question Media Link</label>
-              <input
-                type="text"
-                id="questionMediaLink"
-                name="questionMediaLink"
-                value={formData.questionMediaLink}
-                onChange={handleChange}
-                placeholder="URL to media file"
-                disabled={formData.questionMediaType === 'None'}
-              />
-              {formData.questionMediaType === 'None' && <small>Disabled when Media Type is None</small>}
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm"
+                disabled={loading}
+                aria-busy={loading}
+                data-testid="qf-submit"
+              >
+                {loading ? 'Saving…' : (isEdit ? 'Update Question' : 'Add Question')}
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* ── FORM ACTIONS ── */}
-        <div className="form-actions">
-          <button
-            type="button"
-            className="btn btn-secondary btn-cta btn-icon-cancel"
-            onClick={() => navigate(`/surveys/${surveyId}/questions`)}
+          {/* ── Right column: live preview (sticky on desktop) ───────── */}
+          <aside
+            className="fmb-qf-summary"
+            aria-label="Question preview"
+            data-testid="qf-preview"
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={`btn btn-primary btn-cta ${isEdit ? 'btn-icon-update' : 'btn-icon-add'}`}
-            disabled={loading}
-          >
-            {loading ? 'Saving…' : (isEdit ? 'Update Question' : 'Add Question')}
-          </button>
+            <div className="fmb-qf-summary-eyebrow">Preview</div>
+            <div className="fmb-qf-summary-head">
+              <span
+                className={`fmb-qf-summary-id${preview.id ? '' : ' placeholder'}`}
+                data-testid="qf-preview-id"
+              >
+                {preview.id || 'Q-id'}
+              </span>
+              {preview.isMandatory ? (
+                <Badge status="live" dot={false}>Mandatory</Badge>
+              ) : (
+                <Badge status="draft" dot={false}>Optional</Badge>
+              )}
+            </div>
+            <p
+              className={`fmb-qf-summary-question${preview.description ? '' : ' placeholder'}`}
+              data-testid="qf-preview-question"
+            >
+              {preview.description || 'Question text will appear here as you type.'}
+            </p>
+            <hr className="fmb-qf-summary-divider" />
+            <div className="fmb-qf-summary-kv">
+              <span className="fmb-qf-summary-kv-label">Type</span>
+              <span className="fmb-qf-summary-kv-value" data-testid="qf-preview-type">
+                {preview.type || '—'}
+              </span>
+            </div>
+            <div className="fmb-qf-summary-kv">
+              <span className="fmb-qf-summary-kv-label">Medium</span>
+              <span className="fmb-qf-summary-tags">
+                {preview.medium
+                  ? <Chip>{preview.medium}</Chip>
+                  : <span className="fmb-qf-summary-kv-value" style={{ color: 'var(--text-4, #9b9aa1)' }}>—</span>}
+              </span>
+            </div>
+            {preview.showOptions && (
+              <div className="fmb-qf-summary-kv">
+                {/* Label intentionally "Option count" (singular) so it does
+                    NOT match the lock-in test's /^Options/ query, which is
+                    scoped to the Options section title. */}
+                <span className="fmb-qf-summary-kv-label">Option count</span>
+                <span className="fmb-qf-summary-kv-value" data-testid="qf-preview-options-count">
+                  {preview.optionCount}
+                </span>
+              </div>
+            )}
+            {preview.showTable && (
+              <div className="fmb-qf-summary-kv">
+                <span className="fmb-qf-summary-kv-label">Row count</span>
+                <span className="fmb-qf-summary-kv-value" data-testid="qf-preview-rows-count">
+                  {preview.tableRowCount}
+                </span>
+              </div>
+            )}
+            {preview.parentId && (
+              <div className="fmb-qf-summary-kv">
+                <span className="fmb-qf-summary-kv-label">Parent</span>
+                <span className="fmb-qf-summary-kv-value" data-testid="qf-preview-parent">
+                  <span className="fmb-qf-mono">{preview.parentId}</span>
+                </span>
+              </div>
+            )}
+            <div className="fmb-qf-summary-kv">
+              <span className="fmb-qf-summary-kv-label">Dynamic</span>
+              <span className="fmb-qf-summary-kv-value">{preview.isDynamic ? 'Yes' : 'No'}</span>
+            </div>
+          </aside>
         </div>
       </form>
     </div>

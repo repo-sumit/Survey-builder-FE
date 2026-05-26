@@ -201,4 +201,76 @@ describe('AdminPanel — load failures', () => {
     await user.click(screen.getByRole('button', { name: /Retry/i }));
     await waitFor(() => expect(adminAPI.getUsers).toHaveBeenCalledTimes(2));
   });
+
+  test('states-list load failure shows error + retry button', async () => {
+    const user = userEvent.setup();
+    stateConfigAPI.getAll
+      .mockReset()
+      .mockRejectedValueOnce(new Error('500'))
+      .mockResolvedValueOnce(sampleStates);
+    renderAdmin('/admin');
+    await screen.findByText(/Failed to load state configurations/i);
+    await user.click(screen.getByRole('button', { name: /Retry/i }));
+    await waitFor(() => expect(stateConfigAPI.getAll).toHaveBeenCalledTimes(2));
+  });
+});
+
+/* ── Phase 12 — additive: tab/URL hardening + dropdown behavior ── */
+describe('AdminPanel — Phase 12 hardening', () => {
+  test('unknown ?tab=… value falls back to the default States tab', async () => {
+    renderAdmin('/admin?tab=garbage');
+    await waitFor(() => expect(adminAPI.getUsers).toHaveBeenCalled());
+    expect(screen.getByRole('tab', { name: /State Configuration/i }))
+      .toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /User Management/i }))
+      .toHaveAttribute('aria-selected', 'false');
+  });
+
+  test('switching role to admin hides the State select', async () => {
+    const user = userEvent.setup();
+    renderAdmin('/admin?tab=users');
+    await screen.findByRole('tab', { name: /User Management/i });
+    await user.click(screen.getByRole('button', { name: /Add User/i }));
+    // State select is present when default role is "state"
+    expect(screen.getByLabelText(/^State\b/i)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(/Role/i), 'admin');
+    expect(screen.queryByLabelText(/^State\b/i)).not.toBeInTheDocument();
+  });
+
+  test('Add User API error keeps form open AND preserves input values', async () => {
+    const user = userEvent.setup();
+    adminAPI.createUser.mockRejectedValue({
+      response: { status: 500, data: { error: 'Backend down' } }
+    });
+    renderAdmin('/admin?tab=users');
+    await screen.findByRole('tab', { name: /User Management/i });
+    await user.click(screen.getByRole('button', { name: /Add User/i }));
+    await user.type(screen.getByLabelText(/^Email/i), 'preserved@example.com');
+    await user.type(screen.getByLabelText(/^Name/i), 'Preserved Name');
+    await user.selectOptions(screen.getByLabelText(/^State\b/i), 'HP');
+
+    await act(async () => {
+      await user.click(screen.getByTestId('invite-submit'));
+    });
+    // Form stays open with the user's inputs intact
+    await screen.findByText(/Backend down/i);
+    expect(screen.getByLabelText(/^Email/i)).toHaveValue('preserved@example.com');
+    expect(screen.getByLabelText(/^Name/i)).toHaveValue('Preserved Name');
+    expect(screen.getByLabelText(/^State\b/i)).toHaveValue('HP');
+  });
+
+  test('summary tiles render derived counts when data is present', async () => {
+    adminAPI.getUsers.mockResolvedValue([
+      { id: 1, email: 'a@b.com', role: 'admin', isActive: true },
+      { id: 2, email: 'c@d.com', role: 'state', stateCode: 'HP', isActive: true },
+      { id: 3, email: 'e@f.com', role: 'state', stateCode: 'MH', isActive: false },
+    ]);
+    renderAdmin('/admin?tab=users');
+    await screen.findByRole('tab', { name: /User Management/i });
+    // Wait for the users list to settle
+    await screen.findByTestId('users-table');
+    // The tab count next to the User Management tab equals total users.
+    const userTab = screen.getByRole('tab', { name: /User Management/i });
+    expect(userTab).toHaveTextContent(/3/);
+  });
 });

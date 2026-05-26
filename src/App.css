@@ -648,33 +648,14 @@ body {
   .errors-table th, .errors-table td { padding: 0.5rem; }
 }
 
-/* ── 21. Translation panel ──────────────────────────────────── */
-.translation-panel { border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-sm); }
-.translation-tabs { display: flex; flex-wrap: wrap; background: var(--slate-50); border-bottom: 1px solid var(--border); padding: 0 0.5rem; }
-.translation-tab { padding: 0.625rem 1rem; border: none; background: transparent; cursor: pointer; font-family: var(--font-sans); font-size: var(--fs-sm); font-weight: 500; color: var(--text-3); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color var(--t), border-color var(--t); display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
-.translation-tab:hover { color: var(--blue); border-bottom-color: var(--blue-light); }
-.translation-tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
-.completion-badge { background: var(--slate-200); color: var(--text-3); padding: 0.1rem 0.45rem; border-radius: var(--radius-full); font-size: var(--fs-xs); font-weight: 700; transition: background var(--t), color var(--t); }
-.translation-tab.active .completion-badge { background: var(--blue); color: white; }
-.translation-content { padding: 1.5rem; }
-.translation-section { animation: fadeIn .2s ease; }
-.translation-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.625rem 1rem; background: var(--slate-50); border-bottom: 1px solid var(--border); }
-.translation-toolbar-title { color: var(--text-2); font-weight: 600; font-size: var(--fs-sm); }
-.translation-section-header {}
-.translation-section h4 { margin-bottom: 1rem; color: var(--text-2); font-size: var(--fs-xs); font-weight: 700; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.06em; }
-.table-header-inputs {}
-.options-table { display: flex; flex-direction: column; gap: 0.625rem; background: var(--surface); border-radius: var(--radius-lg); padding: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-xs); }
-.options-table-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--slate-100); }
-.options-table-row:last-child { border-bottom: none; }
-.options-table-header { font-weight: 700; color: var(--text-2); padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
-.options-table-cell { width: 100%; }
-.options-table input { width: 100%; min-height: 36px; padding: 0.35rem 0.625rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: var(--fs-sm); color: var(--text-1); background: var(--surface); transition: border-color var(--t), box-shadow var(--t); }
-.options-table input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.10); }
-.options-table-label { font-weight: 600; color: var(--text-2); font-size: var(--fs-sm); }
-.options-table-option { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.5rem; }
-.options-table-child-input { width: 100%; }
-.options-section { margin-top: 1.25rem; padding: 0.875rem 1rem; background: var(--slate-50); border-radius: var(--radius-md); border: 1px solid var(--border); }
-.options-section h5 { margin-bottom: 0.875rem; color: var(--text-2); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+/* Section 21 (Translation panel, legacy) removed in Phase 8E.
+   It held .translation-panel, .translation-tabs, .translation-tab,
+   .translation-content, .translation-toolbar, .translation-section,
+   .options-table family, and .options-section selectors used by
+   the pre-redesign QuestionForm and the never-merged TranslationPanel.
+   After Phase 8B-8D the redesigned QuestionForm uses fmb-qf-
+   classes in src/styles/ui.css, and grep confirms no JSX or TSX
+   references the legacy selectors. */
 
 /* ── 22. Survey Preview ─────────────────────────────────────── */
 .survey-preview-container { max-width: 1100px; margin: 0 auto; animation: fadeIn .25s ease; }
@@ -2502,7 +2483,10 @@ div[style*="60vh"] {
   animation: pulseLoad 1.5s ease-in-out infinite;
 }
 
-/* ── 44. Translation Panel UI ────────────────────────────── */
+/* ── 44. QuestionForm survey-languages hint (legacy class, still
+        consumed by an inline note above the Question Description
+        field — left in place even though the redesigned shell
+        uses .fmb-qf-lang-hint for the same role). ───────────── */
 
 .survey-languages-hint {
   font-size: 0.8125rem;
@@ -2514,127 +2498,8 @@ div[style*="60vh"] {
   margin-bottom: 1rem;
 }
 
-.translation-section-hint {
-  font-size: 0.875rem;
-  color: var(--text-3);
-  margin-bottom: 1.25rem;
-}
-
-.translation-lang-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
-}
-
-.translation-lang-card:last-child {
-  margin-bottom: 0;
-}
-
-.translation-lang-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.translation-lang-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.translation-native-script {
-  font-size: 0.875rem;
-  color: var(--text-3);
-}
-
-.translation-lang-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.translation-manual-badge {
-  background: var(--amber);
-  color: #fff;
-  font-size: 0.75rem;
-}
-
-.translation-error {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  margin-bottom: 0.75rem;
-}
-
-/* Options translation grid: side-by-side English → Target Language */
-.translation-options-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.translation-options-header {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-3);
-  padding: 0 0 0.375rem 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.translation-option-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.translation-option-source {
-  font-size: 0.875rem;
-  color: var(--text-2);
-  padding: 0.5rem 0.625rem;
-  background: var(--slate-50);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  min-height: 2.25rem;
-  display: flex;
-  align-items: center;
-}
-
-.table-row-label-col {
-  flex: 0 0 2.5rem !important;
-  max-width: 2.5rem;
-  text-align: center;
-}
-
-.table-row-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.625rem;
-  height: 1.625rem;
-  border-radius: 50%;
-  background: var(--primary-light, #e0e7ff);
-  color: var(--primary, #4f46e5);
-  font-size: 0.75rem;
-  font-weight: 700;
-  font-family: monospace;
-}
-
-@media (max-width: 640px) {
-  .translation-lang-header { flex-direction: column; align-items: flex-start; }
-  .translation-options-header,
-  .translation-option-row { grid-template-columns: 1fr; }
-  .translation-options-header span:first-child::after { content: ' (English)'; }
-}
+/* The QuestionForm-specific .translation-lang-card / .translation-
+   options-grid / .table-row-label clusters that previously lived
+   here were removed in Phase 8E — the redesigned Translations
+   section uses .fmb-qf-trans-card + .fmb-qf-row.trans defined in
+   src/styles/ui.css and is verified by the Phase 8D lock-in tests. */

@@ -24,6 +24,7 @@ const renderAt = (path) =>
         />
         <Route path="/admin" element={<div>admin-home</div>} />
         <Route path="/" element={<div>state-home</div>} />
+        <Route path="/access-denied" element={<div>access-denied-page</div>} />
       </Routes>
     </MemoryRouter>
   );
@@ -62,5 +63,21 @@ describe('PublicOnlyRoute (/login)', () => {
     useAuth.mockReturnValue({ user: { role: 'state' }, loading: false });
     renderAt('/login');
     expect(screen.getByText('state-home')).toBeInTheDocument();
+  });
+
+  test.each(['NOT_INVITED', 'INACTIVE', 'DOMAIN_BLOCKED'])(
+    'no user + authReason=%s on /login bounces to /access-denied',
+    (reason) => {
+      useAuth.mockReturnValue({ user: null, loading: false, authReason: reason });
+      renderAt('/login');
+      expect(screen.getByText('access-denied-page')).toBeInTheDocument();
+      expect(screen.queryByText('login-form')).not.toBeInTheDocument();
+    }
+  );
+
+  test('unknown authReason codes still let the user see /login (no infinite bounce)', () => {
+    useAuth.mockReturnValue({ user: null, loading: false, authReason: 'SOMETHING_WEIRD' });
+    renderAt('/login');
+    expect(screen.getByText('login-form')).toBeInTheDocument();
   });
 });
