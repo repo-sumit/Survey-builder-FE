@@ -119,7 +119,7 @@ Each smoke writes a `smoke/screenshots/<name>-report.json`. Expect `consoleError
 ### 2.2 Smoke production immediately after deploy
 
 - [ ] `https://<production-host>/` returns 200 and serves the app shell.
-- [ ] `https://<production-host>/api/health` returns 200 `{"status":"ok"}` — proves the Vercel rewrite to the BE is wired correctly.
+- [ ] `https://<production-host>/api/health` returns 200 with body `{"ok":true,"status":"ok","service":"survey-builder-api","time":"<ISO>"}` — proves the Vercel rewrite to the BE is wired correctly *and* that the BE health route is mounted (it lives ahead of the DB-init middleware so cold-start pings stay cheap).
 - [ ] Browser: open `/login`, sign in with a real Google account that has been invited.
 - [ ] After sign-in, you land on `/` (state user) or `/admin` (admin).
 - [ ] Open DevTools → Application → Local Storage: confirm a key like `sb-<project-ref>-auth-token` exists with a valid JSON session payload.
@@ -151,6 +151,16 @@ If any spot-check fails:
 - [ ] Capture build hash + Vercel deployment URL in the release tracker for traceability.
 - [ ] Monitor browser console error rate (if you have a JS error tracker hooked up — none ships in this repo today) for ≥ 1 hour.
 - [ ] Monitor BE /api logs for any unexpected 4xx / 5xx burst from the FE host.
+
+### 3.1 Backend uptime monitoring (Render Free)
+
+The BE runs on Render Free and sleeps after ~15 min idle. An external 10-minute keep-awake ping is wired against `/api/health`. See `Survey-builder-BE/docs/UPTIME_MONITORING.md` for full details.
+
+- [ ] Confirm `/api/health` returns HTTP 200 with body shape `{ ok, status, service, time }`. (`curl -i https://<your-render-backend>.onrender.com/api/health`)
+- [ ] Configure the `BACKEND_HEALTH_URL` repository secret in the BE repo's **Settings → Secrets and variables → Actions**. Value example: `https://survey-builder-be.onrender.com/api/health`.
+- [ ] Verify the **"Keep Render Backend Awake"** GitHub Actions workflow (`Survey-builder-BE/.github/workflows/keep-render-awake.yml`) ran at least once successfully (Actions tab → most recent green run).
+- [ ] (Optional) Layer an UptimeRobot or cron-job.org monitor on the same `/api/health` URL with a 10-minute interval if you want pager-style alerting on top of the workflow. Setup instructions are in `UPTIME_MONITORING.md` § Options 2 & 3.
+- [ ] Confirm no monitor is configured at intervals shorter than 5 minutes — anything faster eats Render free-tier hours without benefit.
 
 ---
 

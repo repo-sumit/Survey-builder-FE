@@ -171,6 +171,53 @@ describe('AuthContext bootstrap', () => {
     expect(authAPI.me).toHaveBeenCalledTimes(2);
   }, 20_000);
 
+  test('boot calls warmup BEFORE /me when a Supabase session exists', async () => {
+    // The cold-start optimisation: AuthContext serialises /api/health in
+    // front of /api/auth/me so the cold-start wait lands on the cheap
+    // public endpoint, not on the auth bootstrap probe.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    const callOrder = [];
+    authAPI.warmup.mockImplementation(() => {
+      callOrder.push('warmup');
+      return Promise.resolve(true);
+    });
+    authAPI.me.mockImplementation(() => {
+      callOrder.push('me');
+      return Promise.resolve({ role: 'admin', email: 'a@b.com' });
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    expect(callOrder).toEqual(['warmup', 'me']);
+    expect(authAPI.warmup).toHaveBeenCalledTimes(1);
+  });
+
+  test('boot does NOT call warmup when there is no Supabase session', async () => {
+    // Unauthenticated mounts shouldn't pre-warm — there is no upcoming
+    // authed call to protect, and idle pings would add to Render free-tier
+    // usage. We just settle unauthenticated immediately.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(authAPI.warmup).not.toHaveBeenCalled();
+    expect(authAPI.me).not.toHaveBeenCalled();
+  });
+
+  test('boot tolerates a failing warmup and still proceeds to /me', async () => {
+    // Warmup failure (network blip, BE 5xx) must not block auth bootstrap.
+    // /me is the gate; the BE remains source of truth.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.warmup.mockRejectedValueOnce(new Error('boom'));
+    authAPI.me.mockResolvedValue({ role: 'state', email: 's@b.com' });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('state'));
+    expect(authAPI.warmup).toHaveBeenCalledTimes(1);
+    expect(authAPI.me).toHaveBeenCalledTimes(1);
+  });
+
   test('hasPersistedSession flag is exposed from the synchronous storage hint', async () => {
     supabaseMod.hasPersistedSupabaseSession.mockReturnValueOnce(true);
     supabaseMod.supabase.auth.getSession.mockResolvedValue({ data: { session: null } });

@@ -13,16 +13,27 @@ const AuthContext = createContext(null);
 /**
  * Boot timing — staged so we never feel stuck and never give up too early
  * on a cold Render backend:
+ *   - When a persisted Supabase session exists, we first hit a lightweight
+ *     warmup probe (/api/health) bounded by WARMUP_TIMEOUT_MS. This serialises
+ *     the cold-start wait onto a public, DB-free, auth-free endpoint so that
+ *     the subsequent /me runs against a (likely) warm BE. Warmup failure is
+ *     tolerated — we still attempt /me — because the BE is the source of truth.
  *   - First `/me` attempt races against ME_TIMEOUT_FIRST_MS.
  *   - On timeout we DO NOT purge — we retry once with ME_TIMEOUT_SECOND_MS,
  *     since the most common cause is a cold backend (10–15s wake-up).
  *   - Total worst-case bootstrap is bounded by BOOT_TIMEOUT_MS.
  *
- * These values are intentionally a bit higher than the previous single 8s
- * cap. The branded loader surfaces a "still working" message after 4s and a
- * "reload" affordance after 12s, so a longer cap doesn't feel worse — it just
- * avoids spurious BOOT_TIMEOUT/logout when the backend simply needs to wake.
+ * Note on BOOT_TIMEOUT_MS = 20s:
+ *   In the warm-BE case (and the common cold-but-fast-wake case), warmup
+ *   resolves in well under 1 s, leaving 18 s of headroom for the staged /me
+ *   retry (6 + 12). On a truly slow cold wake (>20 s), the boot will time
+ *   out and the user gets the "Reload" affordance on the loader after 12 s.
+ *   We deliberately kept this at 20 s rather than raising it: a longer
+ *   silent wait is more frustrating than an explicit "Reload" prompt, and
+ *   the GitHub Actions keep-awake workflow (see docs/UPTIME_MONITORING.md)
+ *   means cold starts should be rare in normal operation.
  */
+const WARMUP_TIMEOUT_MS = 8000;
 const ME_TIMEOUT_FIRST_MS = 6000;
 const ME_TIMEOUT_SECOND_MS = 12000;
 const BOOT_TIMEOUT_MS = 20000;
@@ -165,6 +176,56 @@ export function AuthProvider({ children }) {
           supabaseSessionRef.current = data?.session || null;
         }
         if (supabaseSessionRef.current) {
+          // Warm the backend BEFORE resolving the profile. The single most
+          // common cause of a slow /me on Render Free is the container
+          // cold-starting; hitting /api/health first ensures /me runs
+          // against an already-awake BE. We tolerate any warmup failure
+          // (timeout, network blip, BE returning 5xx) — /me itself is the
+          // gate, and the BE remains source of truth either way.
+          //
+          // Implementation note: we deliberately do NOT use the existing
+          // `deadline()` helper here because its rejection-based timeout
+          // would orphan a rejected promise once warmup resolves first.
+          // Instead we use a clearable resolve-based timer so the race
+          // always settles cleanly with no unhandled rejection, even
+          // under jest fake timers.
+          await new Promise((resolve) => {
+            let timer;
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              if (timer) clearTimeout(timer);
+              resolve();
+            };
+            timer = setTimeout(() => {
+              if (process.env.NODE_ENV !== 'test') {
+                // eslint-disable-next-line no-console
+                console.warn('[auth] warmup timed out — proceeding to /me');
+              }
+              finish();
+            }, WARMUP_TIMEOUT_MS);
+            // Defensive: authAPI.warmup() might throw synchronously (e.g. if
+            // the module was hot-replaced) or return a non-thenable in tests
+            // where mocks are reset. Either way, we want to fall through to
+            // /me, not crash the boot.
+            try {
+              const warmP = authAPI.warmup();
+              Promise.resolve(warmP).then(finish, (warmErr) => {
+                if (process.env.NODE_ENV !== 'test') {
+                  // eslint-disable-next-line no-console
+                  console.warn('[auth] warmup failed — proceeding to /me', warmErr && warmErr.message);
+                }
+                finish();
+              });
+            } catch (warmErr) {
+              if (process.env.NODE_ENV !== 'test') {
+                // eslint-disable-next-line no-console
+                console.warn('[auth] warmup threw — proceeding to /me', warmErr && warmErr.message);
+              }
+              finish();
+            }
+          });
           await resolveProfile();
         }
       };

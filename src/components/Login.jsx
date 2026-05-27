@@ -122,7 +122,7 @@ const Login = () => {
             </div>
           )}
 
-          <p className="fmb-login-help">Need access? Contact your state coordinator.</p>
+          <p className="fmb-login-help">Need access? Contact Sumit/Satyanshu.</p>
 
           <div className="fmb-login-footer">Built for ConveGenius</div>
         </div>

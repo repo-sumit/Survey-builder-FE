@@ -105,7 +105,11 @@ const AppLoader = ({
 
   const message =
     phase === 'stale'
-      ? 'This is taking longer than expected. The backend may be waking up. You can wait a moment or reload.'
+      // Free-tier hosting note: Render Free sleeps after ~15 min of
+      // inactivity and a cold container can take up to about a minute to
+      // come back. Telling the user this up front prevents the "is it
+      // broken?" worry without making the UI feel broken.
+      ? 'The backend may be waking up. On the free hosting tier this can take up to about a minute. You can wait or reload.'
       : phase === 'slow'
         ? 'Still working… the backend is warming up.'
         : (subtitle || 'Please wait a moment.');

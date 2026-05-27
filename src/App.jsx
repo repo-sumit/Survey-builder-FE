@@ -17,7 +17,6 @@ import TopNav from './components/ui/TopNav';
 // import TweaksPanel from './components/ui/TweaksPanel';
 import CommandPalette from './components/ui/CommandPalette';
 import useTweaks from './hooks/useTweaks';
-import { authAPI } from './services/api';
 import './App.css';
 import './swiftchatRedesign.css';
 
@@ -220,10 +219,12 @@ function App() {
     // and Bootstrap-derived styling read them.
     document.documentElement.setAttribute('data-bs-theme', 'light');
     localStorage.setItem('theme', 'light');
-    // Pre-warm the (possibly cold) Render backend so that the first authed
-    // request — typically /api/auth/me from AuthContext — does not pay the
-    // full cold-start tax. Fire-and-forget; failure is fine.
-    authAPI.warmup().catch(() => {});
+    // Backend warmup is owned by AuthContext now — it serialises a bounded
+    // /api/health probe in front of /api/auth/me when a persisted Supabase
+    // session is present, so the cold-start wait lands on the cheap public
+    // endpoint instead of the bootstrap probe. For unauthenticated mounts,
+    // we deliberately do NOT pre-warm: there is no upcoming authed call to
+    // protect, and idle warmups would amplify Render free-tier usage.
   }, []);
 
   return (

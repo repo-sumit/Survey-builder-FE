@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getAccessToken, signOutSupabase, signInWithGoogle, isSupabaseConfigured } from './supabaseClient';
+import { isPublicApiPath } from './publicApiPaths';
 
 const API_BASE_URL = '/api';
 const AUTH_WARMUP_TIMEOUT_MS = 15000;
@@ -12,6 +13,10 @@ axios.defaults.timeout = 30000;
 // Request: attach Supabase access token (Google sign-in is the only auth path).
 // LEGACY LOGIN — localStorage 'token' fallback disabled.
 axios.interceptors.request.use(async (config) => {
+  // Public endpoints skip token retrieval entirely — see PUBLIC_API_PATHS.
+  if (isPublicApiPath(config.url)) {
+    return config;
+  }
   let token = null;
   if (isSupabaseConfigured) {
     try { token = await getAccessToken(); } catch { /* ignore */ }
