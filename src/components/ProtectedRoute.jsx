@@ -1,27 +1,33 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, AUTH_RECOVERABLE_REASONS } from '../contexts/AuthContext';
 import AppLoader from './AppLoader';
 import { ACCESS_DENIED_REASONS } from './AccessDenied';
 
 /**
  * Auth-gated route guard.
  *
- * Contract:
- *   - While AuthContext is bootstrapping, render the branded AppLoader. The
- *     bootstrap is bounded by AuthContext.BOOT_TIMEOUT_MS and retries /me once
- *     on cold-backend timeout, so this state is short-lived and never blanks
- *     the page.
- *   - If no user after bootstrap → /login.
- *   - If a `requiredRole` is specified and the user has a different role →
- *     redirect to that role's home (admin→/admin, anyone else→/).
+ * Contract (in render order):
+ *   1. While AuthContext is bootstrapping → branded AppLoader.
+ *   2. After settle, when there is NO user:
+ *        - authReason ∈ ACCESS_DENIED_REASONS  → /access-denied
+ *        - authReason ∈ AUTH_RECOVERABLE_REASONS → recovery loader with
+ *          Retry / Sign out / Reload. We render IN PLACE here rather than
+ *          redirecting to /login so the user can re-attempt the boot
+ *          without losing their session for a transient backend hiccup.
+ *        - anything else                       → /login
+ *   3. After settle, when there IS a user:
+ *        - `requiredRole` mismatch → redirect to that role's home.
+ *        - otherwise               → children.
  *
  * Server-side enforcement: this guard is a UX hint, not a security boundary.
  * All protected APIs (incl. /api/admin/*) verify role independently via
- * middleware/auth.js → requireAdmin / requireWriteAccess.
+ * middleware/auth.js → requireAdmin / requireWriteAccess. The recovery
+ * branch deliberately does NOT render `children`, so no protected app
+ * content can leak before the backend has confirmed the user.
  */
 const ProtectedRoute = ({ children, requiredRole }) => {
-  const { user, loading, hasPersistedSession, authReason } = useAuth();
+  const { user, loading, hasPersistedSession, authReason, retryBoot, logout } = useAuth();
 
   if (loading) {
     return (
@@ -38,6 +44,21 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     // tossing them at /login where the failure shows as a banner only.
     if (ACCESS_DENIED_REASONS.includes(authReason)) {
       return <Navigate to="/access-denied" replace />;
+    }
+    // Transient backend failure (timeout / 5xx / network) — session is
+    // intentionally preserved. Render the recovery loader IN PLACE so
+    // the user can Retry without re-authenticating. Sign out is the
+    // escape hatch; Reload is last-resort.
+    if (AUTH_RECOVERABLE_REASONS.includes(authReason)) {
+      return (
+        <AppLoader
+          mode="recovery"
+          title="We couldn't confirm your access"
+          onRetry={retryBoot}
+          onSignOut={logout}
+          testId="protected-route-recovery"
+        />
+      );
     }
     return <Navigate to="/login" replace />;
   }

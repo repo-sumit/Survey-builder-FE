@@ -75,6 +75,93 @@ test.describe('Auth routing', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
+  test('recoverable /me failure renders the recovery loader, NOT /login', async ({ page }) => {
+    // The cornerstone of the stuck-loader fix, exercised end-to-end:
+    //   - Pre-seed a persisted Supabase session in localStorage.
+    //   - Stub /me to return 503 (recoverable transient error).
+    //   - Navigate to /admin.
+    //   - The recovery loader must appear IN PLACE (no redirect to /login).
+    //   - Retry button + Sign-out button must be visible.
+    //   - The session must NOT have been purged (sb-* key still present).
+    await page.addInitScript(({ key, value }) => {
+      window.localStorage.setItem(key, value);
+    }, {
+      key: getSupabaseStorageKey(),
+      value: JSON.stringify({
+        access_token: 'fake', refresh_token: 'r-fake',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'u', email: 'admin@example.com' }
+      })
+    });
+    await page.route('**/api/health', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{"status":"ok"}' })
+    );
+    await page.route('**/api/auth/me', (route) =>
+      route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Database unavailable"}' })
+    );
+
+    await page.goto('/admin');
+
+    // Recovery loader visible, NOT a redirect to /login.
+    const recovery = page.getByTestId('protected-route-recovery');
+    await expect(recovery).toBeVisible({ timeout: 10_000 });
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByTestId('app-loader-retry')).toBeVisible();
+    await expect(page.getByTestId('app-loader-signout')).toBeVisible();
+    await expect(page.getByTestId('app-loader-reload')).toBeVisible();
+
+    // Critical: the session was preserved (not purged on a transient error).
+    const stillHasSession = await page.evaluate((k) => !!window.localStorage.getItem(k), getSupabaseStorageKey());
+    expect(stillHasSession).toBe(true);
+  });
+
+  test('Retry from the recovery loader resolves to the admin panel when /me recovers', async ({ page }) => {
+    // The whole point of recovery: the user can recover without losing
+    // their session. This spec proves the round-trip:
+    //   - First /me call → 503 → recovery loader.
+    //   - Click Retry → second /me call → 200 → admin panel renders.
+    //   - No page reload happens in between.
+    await page.addInitScript(({ key, value }) => {
+      window.localStorage.setItem(key, value);
+    }, {
+      key: getSupabaseStorageKey(),
+      value: JSON.stringify({
+        access_token: 'fake', refresh_token: 'r-fake',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'u', email: 'admin@example.com' }
+      })
+    });
+    await page.route('**/api/health', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{"status":"ok"}' })
+    );
+
+    let meCallCount = 0;
+    await page.route('**/api/auth/me', (route) => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return route.fulfill({
+          status: 503, contentType: 'application/json',
+          body: '{"error":"Database unavailable"}'
+        });
+      }
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ user: { id: 1, email: 'admin@example.com', role: 'admin', isActive: true } })
+      });
+    });
+    await page.route('**/api/admin/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    );
+
+    await page.goto('/admin');
+    await expect(page.getByTestId('protected-route-recovery')).toBeVisible({ timeout: 10_000 });
+
+    // Click Retry — second /me succeeds → admin panel renders.
+    await page.getByTestId('app-loader-retry').click();
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible({ timeout: 10_000 });
+    expect(meCallCount).toBeGreaterThanOrEqual(2);
+  });
+
   test('slow /me does not blank the page — branded loader shows', async ({ page }) => {
     // Delay /me by 3 seconds. Boot loader should still show its branded copy,
     // never a blank screen.

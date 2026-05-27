@@ -8,7 +8,10 @@ import ProtectedRoute from '../ProtectedRoute';
 // up a real AuthProvider (which would also need axios + Supabase client).
 jest.mock('../../contexts/AuthContext', () => ({
   __esModule: true,
-  useAuth: jest.fn()
+  useAuth: jest.fn(),
+  // Export the same constant the real module exports so ProtectedRoute's
+  // import resolves it correctly under the mock.
+  AUTH_RECOVERABLE_REASONS: ['BOOT_TIMEOUT', 'ERROR']
 }));
 const { useAuth } = require('../../contexts/AuthContext');
 
@@ -67,6 +70,66 @@ describe('ProtectedRoute', () => {
       expect(screen.queryByText('login-page')).not.toBeInTheDocument();
     }
   );
+
+  test.each(['BOOT_TIMEOUT', 'ERROR'])(
+    'no user + recoverable authReason=%s renders the recovery loader IN PLACE (not /login)',
+    (reason) => {
+      // Cornerstone of the stuck-loader fix: a transient backend failure
+      // must not bounce the user to /login. Their Supabase session is
+      // intentionally preserved by AuthContext, and this guard renders
+      // the recovery loader so they can Retry without re-auth.
+      const retryBoot = jest.fn();
+      const logout = jest.fn();
+      useAuth.mockReturnValue({
+        user: null,
+        loading: false,
+        authReason: reason,
+        retryBoot,
+        logout
+      });
+      renderAt('/admin');
+      const recovery = screen.getByTestId('protected-route-recovery');
+      expect(recovery).toBeInTheDocument();
+      expect(recovery.getAttribute('data-mode')).toBe('recovery');
+      // No redirect happened.
+      expect(screen.queryByText('login-page')).not.toBeInTheDocument();
+      expect(screen.queryByText('access-denied-page')).not.toBeInTheDocument();
+      // And — critically — no protected children rendered.
+      expect(screen.queryByText('admin-panel')).not.toBeInTheDocument();
+    }
+  );
+
+  test('recovery loader Retry button calls retryBoot from AuthContext', async () => {
+    const retryBoot = jest.fn().mockResolvedValue(undefined);
+    const logout = jest.fn();
+    useAuth.mockReturnValue({
+      user: null,
+      loading: false,
+      authReason: 'BOOT_TIMEOUT',
+      retryBoot,
+      logout
+    });
+    renderAt('/admin');
+    const retryBtn = screen.getByTestId('app-loader-retry');
+    retryBtn.click();
+    expect(retryBoot).toHaveBeenCalledTimes(1);
+  });
+
+  test('recovery loader Sign-out button calls logout from AuthContext', async () => {
+    const retryBoot = jest.fn();
+    const logout = jest.fn().mockResolvedValue(undefined);
+    useAuth.mockReturnValue({
+      user: null,
+      loading: false,
+      authReason: 'ERROR',
+      retryBoot,
+      logout
+    });
+    renderAt('/admin');
+    const signOutBtn = screen.getByTestId('app-loader-signout');
+    signOutBtn.click();
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
 
   test('admin hitting a non-admin route is redirected to /admin', () => {
     useAuth.mockReturnValue({ user: { role: 'admin' }, loading: false });

@@ -117,7 +117,13 @@ describe('AuthContext bootstrap', () => {
     expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
   });
 
-  test('boot never hangs even if /me never resolves (timeout fallback after retry)', async () => {
+  test('boot never hangs even if /me never resolves; settles in BOOT_TIMEOUT WITHOUT purging', async () => {
+    // This is the cornerstone of the stuck-loader fix. Previously a slow
+    // cold start tripped the timeout and PURGED the Supabase session,
+    // dumping the user at /login — the worst possible UX for a transient
+    // backend hiccup. New contract: loading still settles within the
+    // deadline, but the session is PRESERVED so the user can Retry from
+    // the recovery loader without re-authenticating.
     jest.useFakeTimers();
     supabaseMod.supabase.auth.getSession.mockResolvedValue({
       data: { session: { access_token: 'tok' } }
@@ -137,9 +143,188 @@ describe('AuthContext bootstrap', () => {
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
     expect(screen.getByTestId('user').textContent).toBe('null');
     expect(screen.getByTestId('reason').textContent).toBe('BOOT_TIMEOUT');
-    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+    // CRITICAL: NO purge on a transient timeout. The user keeps their
+    // Supabase session and can Retry without re-auth.
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
     // Two attempts made (first slow → retry).
     expect(authAPI.me).toHaveBeenCalledTimes(2);
+  });
+
+  test('/me 401 purges the session and settles unauthenticated with no banner', async () => {
+    // 401 is an authoritative "this token is no good" — drop everything
+    // so the route guard sends the user to /login. No access-denied
+    // banner reason — /login handles its own copy.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({
+      response: { status: 401, data: { error: 'Invalid or expired token' } }
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+  });
+
+  test('/me 5xx KEEPS session and settles in recoverable ERROR state', async () => {
+    // Transient server failure — same recoverable contract as a timeout.
+    // The user can Retry without re-auth.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({
+      response: { status: 503, data: { error: 'Database unavailable' } }
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('reason').textContent).toBe('ERROR');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+  });
+
+  test('/me network error KEEPS session and settles in recoverable ERROR state', async () => {
+    // No response (e.g. DNS failure, fetch threw) — recoverable.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue(new Error('Network Error'));
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('reason').textContent).toBe('ERROR');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+  });
+
+  test('retryBoot from a recoverable state re-runs warmup + /me and resolves to user', async () => {
+    // The recovery loader's Retry button calls retryBoot. This test
+    // proves the round-trip: first /me fails recoverably (5xx), the
+    // user retries, second /me succeeds, AuthContext lands on
+    // authenticated without losing the Supabase session in between.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return Promise.reject({ response: { status: 503, data: { error: 'Database unavailable' } } });
+      }
+      return Promise.resolve({ role: 'state', email: 's@b.com' });
+    });
+
+    let retryFn;
+    const Capture = () => {
+      retryFn = useAuth().retryBoot;
+      return null;
+    };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <Probe />
+          <Capture />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    // Initial boot lands in recoverable ERROR.
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('ERROR'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+
+    // Retry → second /me succeeds → authenticated.
+    await act(async () => { await retryFn(); });
+    expect(screen.getByTestId('user').textContent).toBe('state');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(authAPI.me).toHaveBeenCalledTimes(2);
+  });
+
+  test('retryBoot clears reason and re-enters loading=true during the attempt', async () => {
+    // The recovery flow must visibly return to a working state — the
+    // spinner reappears, the reason banner clears — so the user knows
+    // their click did something.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    let resolveSecondMe;
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return Promise.reject({ response: { status: 503 } });
+      }
+      // Block the retry's /me call so we can observe loading=true mid-retry.
+      return new Promise((resolve) => { resolveSecondMe = resolve; });
+    });
+
+    let retryFn;
+    const Capture = () => {
+      retryFn = useAuth().retryBoot;
+      return null;
+    };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <Probe />
+          <Capture />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('ERROR'));
+
+    // Fire retry but don't await it yet — we want to observe the
+    // intermediate loading=true state.
+    let retryPromise;
+    act(() => { retryPromise = retryFn(); });
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('true'));
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+
+    // Now let the second /me resolve.
+    await act(async () => {
+      resolveSecondMe({ role: 'admin', email: 'a@b.com' });
+      await retryPromise;
+    });
+    expect(screen.getByTestId('loading').textContent).toBe('false');
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+  });
+
+  test('logout from a recoverable state purges and settles unauthenticated', async () => {
+    // The recovery loader's "Sign out" button calls logout. Verifies the
+    // existing logout flow purges sb-* localStorage keys, sessionStorage,
+    // and Supabase session — even when initiated from a recoverable
+    // (non-401) failure state.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({ response: { status: 503 } });
+    localStorage.setItem('sb-xxx-auth-token', 'stale');
+
+    let logoutFn;
+    const Capture = () => {
+      logoutFn = useAuth().logout;
+      return null;
+    };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <Probe />
+          <Capture />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('ERROR'));
+    expect(localStorage.getItem('sb-xxx-auth-token')).toBe('stale'); // still there pre-logout
+
+    await act(async () => { await logoutFn(); });
+    expect(localStorage.getItem('sb-xxx-auth-token')).toBeNull();
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
   });
 
   test('cold-backend warmup: first /me times out, second resolves — user is admin', async () => {
