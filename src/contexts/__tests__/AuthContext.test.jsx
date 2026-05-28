@@ -37,17 +37,29 @@ jest.mock('../../services/supabaseClient', () => {
 
 const { authAPI } = require('../../services/api');
 const supabaseMod = require('../../services/supabaseClient');
+const { CACHE_KEY } = require('../../services/lastVerifiedUserCache');
 
 const Probe = () => {
-  const { user, loading, authReason } = useAuth();
+  const { user, loading, authReason, authWarning } = useAuth();
   return (
     <div>
       <div data-testid="loading">{String(loading)}</div>
       <div data-testid="user">{user ? user.role : 'null'}</div>
       <div data-testid="reason">{authReason || 'none'}</div>
+      <div data-testid="warning">{authWarning || 'none'}</div>
     </div>
   );
 };
+
+/** Seed the lastVerifiedUser cache for stale-while-revalidate tests. */
+function seedCache(user, supabaseUserId = 'sb-uuid-1', email = user?.email || 'a@b.com') {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({
+    user,
+    verifiedAt: Date.now(),
+    supabaseUserId,
+    email
+  }));
+}
 
 const renderApp = () => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -101,6 +113,244 @@ describe('AuthContext bootstrap', () => {
     await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
     expect(screen.getByTestId('loading').textContent).toBe('false');
     expect(screen.getByTestId('reason').textContent).toBe('none');
+  });
+
+  test('successful /me writes the lastVerifiedUser cache for the next boot', async () => {
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ id: 1, role: 'admin', email: 'a@b.com' });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    expect(cached.user).toMatchObject({ role: 'admin', email: 'a@b.com' });
+    expect(cached.supabaseUserId).toBe('sb-uuid-1');
+    expect(cached.email).toBe('a@b.com');
+    expect(typeof cached.verifiedAt).toBe('number');
+    // Cache MUST NOT contain the access token.
+    expect(localStorage.getItem(CACHE_KEY)).not.toContain('tok');
+  });
+
+  test('no Supabase session clears any pre-existing cache and settles unauthenticated', async () => {
+    // Pre-seed a cache from a previous tab that has since signed out.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(authAPI.me).not.toHaveBeenCalled();
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+  });
+});
+
+describe('AuthContext stale-while-revalidate (cached user)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  test('valid cache + session ⇒ user rendered IMMEDIATELY, before /me resolves', async () => {
+    // Cache exists, /me is deliberately slow — the user must NOT wait.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    let resolveMe;
+    authAPI.me.mockReturnValue(new Promise((r) => { resolveMe = r; }));
+    renderApp();
+    // User shows up from cache before /me ever resolves.
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    expect(screen.getByTestId('loading').textContent).toBe('false');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    // Background /me is in flight.
+    expect(authAPI.me).toHaveBeenCalledTimes(1);
+    // Let it finish so the test cleans up without leaking the open promise.
+    await act(async () => { resolveMe({ id: 1, role: 'admin', email: 'a@b.com' }); });
+  });
+
+  test('background /me success updates the cache (verifiedAt advances)', async () => {
+    const userObj = { id: 1, role: 'admin', email: 'a@b.com' };
+    seedCache(userObj);
+    const cachedBefore = JSON.parse(localStorage.getItem(CACHE_KEY));
+    // Make sure verifiedAt advances measurably.
+    await new Promise((r) => setTimeout(r, 5));
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue(userObj);
+    renderApp();
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+      expect(cached.verifiedAt).toBeGreaterThan(cachedBefore.verifiedAt);
+    });
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+  });
+
+  test('background /me 5xx ⇒ user STAYS rendered, authWarning="RECONNECTING", session preserved', async () => {
+    // The whole point of SWR: a transient backend failure must not kick
+    // the user out of the app shell.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({ response: { status: 503 } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    // User is STILL rendered.
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    // No full-screen recovery — reason stays null.
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    // Cache stays in place — the user was previously verified.
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
+    // Session was preserved (no purge on transient failure).
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+  });
+
+  test('background /me network error ⇒ same recoverable behavior as 5xx', async () => {
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue(new Error('Network Error'));
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+  });
+
+  test('background /me 401 ⇒ purges everything (cache, session) and user becomes null', async () => {
+    // 401 is authoritative — token is no good. Even with a cached user,
+    // we MUST log them out so the next request can't replay the dead
+    // token.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({ response: { status: 401 } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('null'));
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+  });
+
+  test('background /me 403 NOT_INVITED ⇒ purges cache + sets access-denied reason', async () => {
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({ response: { status: 403, data: { error: 'NOT_INVITED' } } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('NOT_INVITED'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+  });
+
+  test('expired cache is ignored — strict foreground boot resumes', async () => {
+    // Seed a cache that's already 9 hours old.
+    const oldUser = { id: 1, role: 'admin', email: 'a@b.com' };
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      user: oldUser,
+      verifiedAt: Date.now() - (9 * 60 * 60 * 1000),
+      supabaseUserId: 'sb-uuid-1',
+      email: 'a@b.com'
+    }));
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    let resolveMe;
+    authAPI.me.mockReturnValue(new Promise((r) => { resolveMe = r; }));
+    renderApp();
+    // Loading stays true until /me resolves — no instant cache render.
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('loading').textContent).toBe('true');
+    // The expired cache must have been evicted.
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+    await act(async () => { resolveMe({ id: 1, role: 'admin', email: 'a@b.com' }); });
+  });
+
+  test('cache/session identity mismatch is ignored — strict foreground boot', async () => {
+    // Cache says user A, session says user B (e.g. someone signed out
+    // and signed back in as a different account on the same machine).
+    seedCache({ id: 1, role: 'admin', email: 'old@a.com' }, 'sb-old-uuid', 'old@a.com');
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-new-uuid', email: 'new@b.com' }, access_token: 'tok' } }
+    });
+    let resolveMe;
+    authAPI.me.mockReturnValue(new Promise((r) => { resolveMe = r; }));
+    renderApp();
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+    // Identity mismatch ⇒ no cached user surfaced (foreground boot in flight).
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('loading').textContent).toBe('true');
+    // Mismatched cache was evicted.
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+    await act(async () => { resolveMe({ id: 2, role: 'state', email: 'new@b.com' }); });
+  });
+
+  test('logout clears the lastVerifiedUser cache', async () => {
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ id: 1, role: 'admin', email: 'a@b.com' });
+    let logoutFn;
+    const Capture = () => { logoutFn = useAuth().logout; return null; };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <Probe />
+          <Capture />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
+    await act(async () => { await logoutFn(); });
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+    expect(screen.getByTestId('user').textContent).toBe('null');
+  });
+
+  test('Retry from RECONNECTING state revalidates without dropping the user (still cached on second failure)', async () => {
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    // Both background calls fail with 5xx.
+    authAPI.me.mockRejectedValue({ response: { status: 503 } });
+    let retryFn;
+    const Capture = () => { retryFn = useAuth().retryBoot; return null; };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <Probe />
+          <Capture />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    // Retry — second 503 still keeps the user visible (banner re-arms).
+    await act(async () => { await retryFn(); });
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+  });
+});
+
+describe('AuthContext bootstrap (legacy / no-cache paths)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
   test('boot resolves to unauthenticated when /me returns 403 NOT_INVITED', async () => {

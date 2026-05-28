@@ -7,6 +7,11 @@ import {
   signOutSupabase,
   hasPersistedSupabaseSession
 } from '../services/supabaseClient';
+import {
+  readValidCache,
+  writeCache,
+  clearCache as clearLastVerifiedCache
+} from '../services/lastVerifiedUserCache';
 
 const AuthContext = createContext(null);
 
@@ -54,11 +59,23 @@ const BOOT_TIMEOUT_MS = 20000;
  * | BOOT_TIMEOUT   | YES — preserved    | recovery loader (Retry…) |
  * | ERROR          | YES — preserved    | recovery loader (Retry…) |
  *
- * "Recoverable" reasons (BOOT_TIMEOUT, ERROR) are the critical fix for the
- * stuck-loader bug — previously every timeout purged the session and
- * dumped the user at /login. They can now Retry without a page reload.
+ * "Recoverable" reasons (BOOT_TIMEOUT, ERROR) are shown via full-screen
+ * recovery only when there's no cached identity. When a valid cached user
+ * is present, the same transient failure surfaces as a non-blocking
+ * `authWarning` banner instead.
  */
 export const AUTH_RECOVERABLE_REASONS = ['BOOT_TIMEOUT', 'ERROR'];
+
+/**
+ * authWarning — non-blocking status for stale-while-revalidate.
+ * Only ever set when there IS a cached user; otherwise we use authReason +
+ * full-screen recovery instead.
+ *
+ *   - 'RECONNECTING' : background /me failed transiently (timeout / 5xx /
+ *                       network). The cached user keeps using the app
+ *                       (read-only-safe paths); a small banner offers Retry.
+ */
+export const AUTH_WARNINGS = { RECONNECTING: 'RECONNECTING' };
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -79,6 +96,7 @@ function deadline(ms, label) {
  *   - any localStorage key starting with `sb-` (Supabase client persistence)
  *   - the legacy `token` key (defensive — removed from the codebase but a
  *     returning user may still have it cached)
+ *   - the lastVerifiedUser cache (must die with the session)
  *   - sessionStorage entirely (no app-level data lives there today)
  *   - Supabase server-side session via signOut
  */
@@ -96,6 +114,9 @@ async function purgeBrowserAuthArtifacts() {
   } catch (e) {
     console.warn('[auth] storage cleanup failed', e);
   }
+  // The lastVerifiedUser cache is auth-bound; clear it too so the next
+  // boot can't show a previous identity's role to whoever logs in next.
+  clearLastVerifiedCache();
 }
 
 /**
@@ -105,38 +126,33 @@ async function purgeBrowserAuthArtifacts() {
  *   - `reason`: which authReason to surface (null = no banner / generic).
  *
  * The cardinal rule: a transient backend hiccup (timeout, 5xx, network
- * blip) must NEVER purge — that's the bug this whole refactor is fixing.
- * Only authoritative server signals (401 = bad/expired token, 403 with a
- * canonical code = user-level rejection) cause a purge.
+ * blip) must NEVER purge — only authoritative server signals (401 = bad/
+ * expired token, 403 with a canonical code = user-level rejection) cause
+ * a purge.
+ *
+ * `transient: true` is the signal the caller needs to decide between
+ * full-screen recovery (no cached user) and inline banner (cached user
+ * present). The `reason` is still set so the recovery loader has the
+ * right copy, but the SWR path will choose to use `authWarning` instead.
  */
 function classifyMeError(err) {
-  // Our own deadline marker — kept session, recoverable, can Retry.
   if (err && err.message === 'ME_TIMEOUT') {
-    return { purge: false, reason: 'BOOT_TIMEOUT' };
+    return { purge: false, reason: 'BOOT_TIMEOUT', transient: true };
   }
   const status = err?.response?.status;
   const code = err?.response?.data?.error;
   if (status === 401) {
-    // Authoritative "this token is no good." Drop everything and let the
-    // route guard send the user to /login. No banner — /login carries its
-    // own copy via authReason if applicable.
-    return { purge: true, reason: null };
+    return { purge: true, reason: null, transient: false };
   }
   if (status === 403 && code) {
-    // Authoritative "this human is not allowed." Drop the session and
-    // surface the canonical reason so the route guard shows
-    // /access-denied instead of /login.
-    return { purge: true, reason: code };
+    return { purge: true, reason: code, transient: false };
   }
   if (status === 403) {
-    // 403 with no canonical reason code — treat conservatively like an
-    // unspecified denial. Purge to avoid loops, but no banner.
-    return { purge: true, reason: null };
+    return { purge: true, reason: null, transient: false };
   }
   // 5xx, network errors, opaque CORS failures, axios timeouts that didn't
-  // come from our own ME_TIMEOUT deadline — KEEP session, surface a
-  // generic recoverable error so the user can Retry without re-auth.
-  return { purge: false, reason: 'ERROR' };
+  // come from our own ME_TIMEOUT deadline — KEEP session, recoverable.
+  return { purge: false, reason: 'ERROR', transient: true };
 }
 
 export function AuthProvider({ children }) {
@@ -144,6 +160,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authReason, setAuthReason] = useState(null);
+  /**
+   * authWarning — non-blocking banner state. Only set when we have a
+   * cached user and the background /me failed transiently. Never blocks
+   * route rendering.
+   */
+  const [authWarning, setAuthWarning] = useState(null);
+  const [isRevalidating, setIsRevalidating] = useState(false);
   // Synchronous best-effort hint computed once at mount — used by route guards
   // to choose loader copy ("Restoring your session…" vs plain "Loading…"). NEVER
   // used as proof of identity; the backend is still the authority on every API.
@@ -151,30 +174,37 @@ export function AuthProvider({ children }) {
   const supabaseSessionRef = useRef(null);
   const resolvingRef = useRef(false);     // guard against duplicate /me calls
   const bootedRef = useRef(false);        // ensure boot only runs once
+  // Synchronous mirror of the user state. CRITICAL: we set this in
+  // setUserSync BEFORE the React state update flushes, so the background
+  // revalidation's error path (which runs in the same microtask chain as
+  // the SWR cache render) sees the correct identity. If we relied on a
+  // `userRef.current = user` line during render, it would be stale because
+  // React doesn't render between scheduling setUser and the next async
+  // continuation in the same call stack.
+  const userRef = useRef(null);
+  const setUserSync = useCallback((next) => {
+    userRef.current = next;
+    setUser(next);
+  }, []);
 
   /**
    * Ask the backend "who am I?". Single source of truth for role + state.
    *
-   * Success path:
-   *   - setUser(profile), clear authReason, return profile.
-   *
-   * Failure paths (classified via classifyMeError):
-   *   - 401:            purge, setUser(null), no reason → guard redirects /login.
-   *   - 403 + reason:   purge, setUser(null), reason set → /access-denied.
-   *   - ME_TIMEOUT:     KEEP session, setUser(null), reason='BOOT_TIMEOUT'
-   *                     → guard renders recovery loader with Retry.
-   *   - other (5xx…):   KEEP session, setUser(null), reason='ERROR'
-   *                     → guard renders recovery loader with Retry.
-   *
-   * On the first ME_TIMEOUT we transparently retry once with a longer
-   * deadline (handles Render cold-start where one /me can take 10–15 s).
-   * Only the second timeout surfaces BOOT_TIMEOUT to the UI.
+   * Modes:
+   *   - background=false (default): foreground boot or explicit retry.
+   *     On any failure, clear user and surface a reason / recovery state.
+   *   - background=true: stale-while-revalidate revalidation. A cached
+   *     user is already in `user` state and on screen. Transient failures
+   *     (BOOT_TIMEOUT / ERROR) MUST NOT clear the user — they only set
+   *     a non-blocking authWarning. Authoritative failures (401, 403)
+   *     still purge.
    *
    * Always returns; never throws.
    */
-  const resolveProfile = useCallback(async () => {
+  const resolveProfile = useCallback(async ({ background = false } = {}) => {
     if (resolvingRef.current) return null;
     resolvingRef.current = true;
+    if (background) setIsRevalidating(true);
     try {
       let profile;
       try {
@@ -183,7 +213,6 @@ export function AuthProvider({ children }) {
           deadline(ME_TIMEOUT_FIRST_MS, 'ME_TIMEOUT')
         ]);
       } catch (firstErr) {
-        // Only retry on our own deadline; for a real HTTP error, fall through.
         if (firstErr?.message !== 'ME_TIMEOUT') throw firstErr;
         if (process.env.NODE_ENV !== 'test') {
           // eslint-disable-next-line no-console
@@ -194,31 +223,47 @@ export function AuthProvider({ children }) {
           deadline(ME_TIMEOUT_SECOND_MS, 'ME_TIMEOUT')
         ]);
       }
-      setUser(profile);
+      setUserSync(profile);
       setAuthReason(null);
+      setAuthWarning(null);
+      // Persist for the next boot. Only AFTER /me succeeds — never before.
+      writeCache(profile, supabaseSessionRef.current);
       return profile;
     } catch (err) {
-      const { purge, reason } = classifyMeError(err);
+      const { purge, reason, transient } = classifyMeError(err);
       if (purge) {
+        // Authoritative rejection (401 / 403). Tear everything down,
+        // including the cache, so the next boot can't fall back to it.
         await purgeBrowserAuthArtifacts();
+        setUserSync(null);
+        setAuthReason(reason);
+        setAuthWarning(null);
+      } else if (transient && background && userRef.current) {
+        // Stale-while-revalidate happy path: we have a cached user on
+        // screen and the background revalidator hit a transient failure.
+        // KEEP the user. KEEP the cache (the user is still valid as far
+        // as the last successful /me told us). Surface a non-blocking
+        // banner so the user knows mutations may not land yet.
+        setAuthWarning(AUTH_WARNINGS.RECONNECTING);
+      } else {
+        // No cached user OR foreground call — fall back to the existing
+        // full-screen recovery contract. Session is preserved (no purge).
+        setUserSync(null);
+        setAuthReason(reason);
+        setAuthWarning(null);
       }
-      setAuthReason(reason);
-      setUser(null);
       return null;
     } finally {
       resolvingRef.current = false;
+      if (background) setIsRevalidating(false);
     }
-  }, []);
+  }, [setUserSync]);
 
   /**
    * Run the warmup probe (bounded by WARMUP_TIMEOUT_MS) and then /me.
    * Returns when the boot pipeline has settled — never throws.
-   *
-   * Extracted from the initial boot effect so it can be re-invoked by
-   * `retryBoot` without re-running getSession() (we already have the
-   * session in supabaseSessionRef).
    */
-  const runWarmupThenResolve = useCallback(async () => {
+  const runWarmupThenResolve = useCallback(async ({ background = false } = {}) => {
     await new Promise((resolve) => {
       let timer;
       let settled = false;
@@ -235,9 +280,6 @@ export function AuthProvider({ children }) {
         }
         finish();
       }, WARMUP_TIMEOUT_MS);
-      // Defensive: authAPI.warmup() might throw synchronously or return a
-      // non-thenable in tests where mocks are reset. Either way, we want
-      // to fall through to /me, not crash the boot.
       try {
         const warmP = authAPI.warmup();
         Promise.resolve(warmP).then(finish, (warmErr) => {
@@ -255,67 +297,83 @@ export function AuthProvider({ children }) {
         finish();
       }
     });
-    await resolveProfile();
+    await resolveProfile({ background });
   }, [resolveProfile]);
 
   /**
-   * Boot once + subscribe to Supabase auth events.
-   *
-   * Strict-mode / mount handling:
-   *   - React 18 StrictMode synthetically unmounts + remounts the effect
-   *     in development. Boot runs once across the strict double-mount
-   *     (gated by `bootedRef`), and the Supabase auth subscription
-   *     re-attaches on every effect invocation so the strict cleanup-
-   *     then-resetup leaves us with a live listener at all times.
-   *   - React 18 silently no-ops `setState` on truly-unmounted components,
-   *     so we don't need a `cancelled` flag.
-   *
-   * Boot timeout handling:
-   *   - The outer Promise.race against deadline(BOOT_TIMEOUT_MS) bounds the
-   *     whole boot so a stalled Supabase getSession can't hang loading=true.
-   *   - On AUTH_BOOT_TIMEOUT we set reason='BOOT_TIMEOUT' but DO NOT purge
-   *     — same recoverable contract as the inner ME_TIMEOUT path. The user
-   *     keeps their session and can Retry from the recovery loader.
+   * Boot — three branches:
+   *   1. No Supabase session → settle unauthenticated immediately.
+   *   2. Session + valid cached user → render cache, revalidate in background.
+   *   3. Session + no/expired/mismatched cache → strict foreground boot.
    */
   useEffect(() => {
     if (!bootedRef.current) {
       bootedRef.current = true;
 
       const bootInner = async () => {
+        // Step 1: hydrate Supabase session.
         if (isSupabaseConfigured && supabase) {
           const { data } = await supabase.auth.getSession();
           supabaseSessionRef.current = data?.session || null;
         }
-        if (supabaseSessionRef.current) {
-          await runWarmupThenResolve();
+
+        // Branch 1: no session — nothing to verify.
+        if (!supabaseSessionRef.current) {
+          // Defensive: if a previous tab left a cache here without a
+          // session (shouldn't happen, but cheap to handle), evict it.
+          clearLastVerifiedCache();
+          return;
         }
+
+        // Branch 2: cached identity matches the session — render the
+        // app immediately and revalidate in the background. The
+        // background path tolerates timeouts/5xx without dropping
+        // the user, but still respects 401/403 from the backend.
+        const cached = readValidCache(supabaseSessionRef.current);
+        if (cached && cached.user) {
+          setUserSync(cached.user);
+          // The async revalidation runs OUTSIDE the BOOT_TIMEOUT race —
+          // it's no longer gating the loader. Fire-and-forget; any
+          // failure is captured by resolveProfile's own catch and
+          // surfaced as authWarning instead of an unhandled rejection.
+          runWarmupThenResolve({ background: true }).catch(() => {});
+          return;
+        }
+
+        // Branch 3: session but no valid cache — strict foreground
+        // boot. Existing behavior: full-screen recovery on
+        // BOOT_TIMEOUT/ERROR, /access-denied on 403, /login on 401.
+        await runWarmupThenResolve({ background: false });
       };
 
       (async () => {
         try {
           await Promise.race([bootInner(), deadline(BOOT_TIMEOUT_MS, 'AUTH_BOOT_TIMEOUT')]);
         } catch (err) {
+          // The outer BOOT_TIMEOUT only fires if bootInner itself stalls
+          // (e.g. supabase.auth.getSession hung). Treat as recoverable —
+          // BUT honor the cached-user contract: if we already showed a
+          // cached user (Branch 2), do NOT drop them.
           if (err && err.message === 'AUTH_BOOT_TIMEOUT') {
-            // Outer deadline. KEEP session — same recoverable contract as
-            // the inner ME_TIMEOUT path. The user can Retry from the
-            // recovery loader without re-authenticating.
             // eslint-disable-next-line no-console
             console.warn('[auth] boot timeout — recoverable, session preserved');
-            setAuthReason('BOOT_TIMEOUT');
-            setUser(null);
+            if (userRef.current) {
+              setAuthWarning(AUTH_WARNINGS.RECONNECTING);
+            } else {
+              setAuthReason('BOOT_TIMEOUT');
+              setUserSync(null);
+            }
           } else {
-            // Unexpected exception in bootInner (not a timeout, not /me).
-            // Treat as recoverable too — refuse to purge for an opaque
-            // failure we don't understand.
             // eslint-disable-next-line no-console
             console.error('[auth] boot threw — recoverable, session preserved', err);
-            setAuthReason('ERROR');
-            setUser(null);
+            if (userRef.current) {
+              setAuthWarning(AUTH_WARNINGS.RECONNECTING);
+            } else {
+              setAuthReason('ERROR');
+              setUserSync(null);
+            }
           }
         } finally {
-          // ALWAYS settle loading. The state machine guarantees we land in
-          // exactly one of: authenticated | unauthenticated | access_denied
-          // | recoverable. No infinite spinner is possible past this point.
           setLoading(false);
         }
       })();
@@ -328,7 +386,8 @@ export function AuthProvider({ children }) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           await resolveProfile();
         } else if (event === 'SIGNED_OUT') {
-          setUser(null);
+          clearLastVerifiedCache();
+          setUserSync(null);
         }
       });
       sub = data?.subscription;
@@ -337,8 +396,6 @@ export function AuthProvider({ children }) {
     return () => {
       if (sub) sub.unsubscribe();
     };
-    // resolveProfile / runWarmupThenResolve are stable (useCallback w/
-    // empty deps chain). Run once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -346,85 +403,87 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured) {
       throw new Error('Google sign-in is not configured.');
     }
-    // Returns immediately; session arrives via onAuthStateChange after redirect.
     await authAPI.loginWithGoogle();
   }, []);
 
   /**
-   * Logout — must clear ALL auth artifacts atomically. After this returns
-   * the user must not be able to recover their session by URL-hopping.
+   * Logout — must clear ALL auth artifacts atomically, including the
+   * lastVerifiedUser cache.
    */
   const logout = useCallback(async () => {
     await purgeBrowserAuthArtifacts();
-    setUser(null);
+    setUserSync(null);
     setAuthReason(null);
+    setAuthWarning(null);
     queryClient.clear();
-  }, [queryClient]);
+  }, [queryClient, setUserSync]);
 
   /**
-   * Re-run the boot pipeline from a recoverable state. Used by the
-   * recovery loader's "Retry" button.
+   * Re-run the boot pipeline. Called from the recovery loader's Retry
+   * button AND from the reconnect banner's Retry action.
    *
-   * Contract:
-   *   - Goes back to loading=true so the spinner reappears immediately.
-   *   - Re-uses the existing Supabase session in `supabaseSessionRef`
-   *     (no need to re-call getSession — the session is still there;
-   *     we never purged it on a recoverable failure).
-   *   - Bounded by BOOT_TIMEOUT_MS exactly like the initial boot, so
-   *     Retry can never re-introduce an infinite spinner.
-   *   - On second-attempt failure, lands back in the same recoverable
-   *     state. The user can Retry again or Sign out.
-   *   - If there's no session at all (e.g. the user signed out between
-   *     attempts) we settle unauthenticated quickly.
+   * When called with a cached user already on screen, this re-runs in
+   * background mode (so a second transient failure stays a banner, not
+   * a full-screen takeover).
    */
   const retryBoot = useCallback(async () => {
-    setLoading(true);
-    setAuthReason(null);
+    const hadUser = !!userRef.current;
+    if (!hadUser) {
+      // Foreground retry from the recovery loader.
+      setLoading(true);
+      setAuthReason(null);
+    }
+    setAuthWarning(null);
     try {
-      // Re-confirm the session is still in localStorage. The most common
-      // path is "yes, still there"; if it's gone, settle unauthenticated.
       if (isSupabaseConfigured && supabase) {
         const { data } = await supabase.auth.getSession();
         supabaseSessionRef.current = data?.session || null;
       }
       if (!supabaseSessionRef.current) {
-        setUser(null);
+        // Session vanished between mount and retry.
+        clearLastVerifiedCache();
+        setUserSync(null);
         return;
       }
       await Promise.race([
-        runWarmupThenResolve(),
+        runWarmupThenResolve({ background: hadUser }),
         deadline(BOOT_TIMEOUT_MS, 'AUTH_BOOT_TIMEOUT')
       ]);
     } catch (err) {
-      if (err && err.message === 'AUTH_BOOT_TIMEOUT') {
+      if (hadUser) {
+        // We had a cached user on screen — don't kick them out for a
+        // retry-time hiccup, just re-arm the warning.
+        setAuthWarning(AUTH_WARNINGS.RECONNECTING);
+      } else if (err && err.message === 'AUTH_BOOT_TIMEOUT') {
         setAuthReason('BOOT_TIMEOUT');
+        setUserSync(null);
       } else {
         setAuthReason('ERROR');
+        setUserSync(null);
       }
-      setUser(null);
     } finally {
-      setLoading(false);
+      if (!hadUser) setLoading(false);
     }
-  }, [runWarmupThenResolve]);
+  }, [runWarmupThenResolve, setUserSync]);
 
   const clearAuthReason = useCallback(() => setAuthReason(null), []);
+  const dismissAuthWarning = useCallback(() => setAuthWarning(null), []);
 
   const value = {
     user,
     loading,
     authReason,
-    /**
-     * Best-effort hint: did localStorage contain a Supabase session at mount?
-     * Used by route guards to pick loader copy. NOT authorization.
-     */
+    authWarning,
+    isRevalidating,
     hasPersistedSession,
     clearAuthReason,
+    dismissAuthWarning,
     loginWithGoogle,
     logout,
     isSupabaseConfigured,
     /** Imperative re-fetch of /me only — used after profile-mutating actions. */
     refreshProfile: resolveProfile,
-    /** Re-run the full boot pipeline (warmup + /me). Used by recovery loader. */
+    /** Re-run the full boot pipeline (warmup + /me). Used by recovery loader + banner. */
     retryBoot
   };
 

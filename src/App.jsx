@@ -16,6 +16,7 @@ import TopNav from './components/ui/TopNav';
 // Re-enable by uncommenting this import AND the panel render below in AppShell.
 // import TweaksPanel from './components/ui/TweaksPanel';
 import CommandPalette from './components/ui/CommandPalette';
+import ReconnectBanner from './components/ReconnectBanner';
 import useTweaks from './hooks/useTweaks';
 import './App.css';
 import './swiftchatRedesign.css';
@@ -194,6 +195,11 @@ function AppShell({ children }) {
       {isTop
         ? <TopNav  onSearchOpen={() => setCmdOpen(true)} />
         : <Sidebar onSearchOpen={() => setCmdOpen(true)} />}
+
+      {/* Non-blocking reconnect banner. Renders null unless AuthContext
+          is in the stale-while-revalidate "RECONNECTING" state. Mounted
+          above main so it doesn't shift the route content. */}
+      <ReconnectBanner />
 
       <main className="main-content fmb-main-pane">
         {children}

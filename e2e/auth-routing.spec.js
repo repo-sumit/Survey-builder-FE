@@ -197,3 +197,137 @@ test.describe('Auth routing', () => {
     await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible({ timeout: 8_000 });
   });
 });
+
+/* ─── Stale-while-revalidate (cached profile) suite ───────────────────
+ *
+ * Every spec below pre-seeds BOTH a Supabase session AND the
+ * `fmb:lastVerifiedUser:v1` cache. That combination is what makes the
+ * app shell render IMMEDIATELY on boot, before /api/auth/me resolves.
+ * The tests then mock /me to fail in various ways and assert that the
+ * cached user keeps using the app while the reconnect banner surfaces
+ * (or, for 401/403, that we still tear everything down correctly).
+ */
+test.describe('Auth SWR (lastVerifiedUser cache)', () => {
+  const CACHE_KEY = 'fmb:lastVerifiedUser:v1';
+  const SUPABASE_USER_ID = 'sb-uuid-cached';
+  const ADMIN = { id: 1, email: 'admin@example.com', role: 'admin', stateCode: null, isActive: true, name: 'Admin' };
+
+  async function seedCachedAdmin(page) {
+    // Persist BEFORE app boots so AuthContext picks both up on mount.
+    await page.addInitScript(({ sbKey, sbValue, cacheKey, cacheValue }) => {
+      window.localStorage.setItem(sbKey, sbValue);
+      window.localStorage.setItem(cacheKey, cacheValue);
+    }, {
+      sbKey: getSupabaseStorageKey(),
+      sbValue: JSON.stringify({
+        access_token: 'fake', refresh_token: 'r-fake',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: SUPABASE_USER_ID, email: 'admin@example.com' }
+      }),
+      cacheKey: CACHE_KEY,
+      cacheValue: JSON.stringify({
+        user: ADMIN,
+        verifiedAt: Date.now(),
+        supabaseUserId: SUPABASE_USER_ID,
+        email: 'admin@example.com'
+      })
+    });
+    await page.route('**/api/health', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/json', body: '{"status":"ok"}' })
+    );
+    await page.route('**/api/admin/**', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    );
+    await page.route('**/*.supabase.co/**', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+    );
+  }
+
+  test('refresh /admin with valid cached profile renders the panel WITHOUT full-screen recovery', async ({ page }) => {
+    // Delay /me by 5 s so the cached profile MUST be what's on screen
+    // initially. A never-responding handler causes flakes with supabase-js
+    // v2's background token-refresh attempts in jsdom; a deferred 200
+    // response is deterministic and proves the same thing.
+    await seedCachedAdmin(page);
+    await page.route('**/api/auth/me', async (route) => {
+      await new Promise((r) => setTimeout(r, 5000));
+      route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ user: ADMIN })
+      });
+    });
+
+    await page.goto('/admin');
+    // Admin panel rendered immediately from cache — well before the 5 s /me
+    // delay would have allowed a fresh fetch. No full-screen recovery, no
+    // /login bounce.
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible({ timeout: 3_000 });
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+  });
+
+  test('background /me 503 with cached profile shows reconnect banner, panel stays visible', async ({ page }) => {
+    await seedCachedAdmin(page);
+    await page.route('**/api/auth/me', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Database unavailable"}' })
+    );
+
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible({ timeout: 6_000 });
+    // Reconnect banner surfaces the warning without blocking the app.
+    await expect(page.getByTestId('reconnect-banner')).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByTestId('reconnect-banner-retry')).toBeVisible();
+    await expect(page.getByTestId('reconnect-banner-dismiss')).toBeVisible();
+    // Full-screen recovery must NOT appear when we have a cached user.
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+    // Cache and session were preserved (transient failure must not purge).
+    const cacheStillPresent = await page.evaluate((k) => !!window.localStorage.getItem(k), CACHE_KEY);
+    expect(cacheStillPresent).toBe(true);
+  });
+
+  test('background /me 401 with cached profile signs the user out and routes to /login', async ({ page }) => {
+    // 401 is authoritative — token bad. Cached identity must NOT carry
+    // the user past this; we purge cache + session and redirect.
+    await seedCachedAdmin(page);
+    await page.route('**/api/auth/me', (r) =>
+      r.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Authentication required"}' })
+    );
+
+    await page.goto('/admin');
+    // The cached profile may flash for a tick — but we end up on /login.
+    await page.waitForURL(/\/login/, { timeout: 10_000 });
+    const cacheGone = await page.evaluate((k) => window.localStorage.getItem(k) === null, CACHE_KEY);
+    expect(cacheGone).toBe(true);
+  });
+
+  test('background /me 403 NOT_INVITED with cached profile routes to /access-denied (cache cleared)', async ({ page }) => {
+    await seedCachedAdmin(page);
+    await page.route('**/api/auth/me', (r) =>
+      r.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"NOT_INVITED"}' })
+    );
+
+    await page.goto('/admin');
+    await page.waitForURL(/\/access-denied/, { timeout: 10_000 });
+    const cacheGone = await page.evaluate((k) => window.localStorage.getItem(k) === null, CACHE_KEY);
+    expect(cacheGone).toBe(true);
+  });
+
+  test('Retry from the reconnect banner triggers another /me call', async ({ page }) => {
+    await seedCachedAdmin(page);
+    let meCallCount = 0;
+    await page.route('**/api/auth/me', (r) => {
+      meCallCount += 1;
+      return r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Database unavailable"}' });
+    });
+
+    await page.goto('/admin');
+    await expect(page.getByTestId('reconnect-banner')).toBeVisible({ timeout: 6_000 });
+    const before = meCallCount;
+    await page.getByTestId('reconnect-banner-retry').click();
+    // Wait a beat for the retry to fire.
+    await page.waitForFunction((b) => true /* yield */, before, { timeout: 1000 }).catch(() => {});
+    await expect.poll(() => meCallCount, { timeout: 5_000 }).toBeGreaterThan(before);
+    // Cached user is still visible — second 503 keeps SWR contract.
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible();
+  });
+});

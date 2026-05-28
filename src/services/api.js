@@ -1,6 +1,7 @@
 import axios from 'axios';
-import { getAccessToken, signOutSupabase, signInWithGoogle, isSupabaseConfigured } from './supabaseClient';
+import { supabase, getAccessToken, signOutSupabase, signInWithGoogle, isSupabaseConfigured } from './supabaseClient';
 import { isPublicApiPath } from './publicApiPaths';
+import { createOn401Refresh } from './authResponseInterceptor';
 
 const API_BASE_URL = '/api';
 const AUTH_WARMUP_TIMEOUT_MS = 15000;
@@ -31,27 +32,33 @@ axios.interceptors.request.use(async (config) => {
   return config;
 });
 
-axios.interceptors.response.use(
-  response => response,
-  async (error) => {
-    const requestUrl = typeof error.config?.url === 'string' ? error.config.url : '';
-    // /auth/me is the AuthContext bootstrap probe. AuthContext owns the cleanup
-    // and redirect for it (so it can timeout, set an `authReason` banner, etc.).
-    // /auth/login is no longer used (returns 410) but kept here as a safe-list.
-    const isAuthBootstrapRequest =
-      requestUrl.includes('/auth/me') || requestUrl.includes('/auth/login');
-
-    if (error.response?.status === 401 && !isAuthBootstrapRequest) {
-      // Token was valid on initial bootstrap but expired/rotated mid-session.
-      // Clear Supabase and force a clean sign-in flow.
-      try { await signOutSupabase(); } catch { /* ignore */ }
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+/**
+ * Refresh-on-401 policy. Implemented in `authResponseInterceptor.js` and
+ * injected with the live deps below. See that file for the full rules.
+ * Tests for the policy live next to that module and don't import axios.
+ */
+const on401Refresh = createOn401Refresh({
+  isPublicApiPath,
+  refreshSession: async () => {
+    if (!supabase || !isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) return null;
+      return (data && data.session) || null;
+    } catch {
+      return null;
     }
-    return Promise.reject(error);
-  }
-);
+  },
+  signOut: signOutSupabase,
+  redirectToLogin: () => {
+    if (typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  },
+  request: (config) => axios(config)
+});
+
+axios.interceptors.response.use(response => response, on401Refresh);
 
 // --- Auth API ---
 

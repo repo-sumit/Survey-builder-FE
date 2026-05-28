@@ -55,6 +55,25 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('admin-panel')).toBeInTheDocument();
   });
 
+  test('cached user + authWarning=RECONNECTING ⇒ children render (no full-screen recovery)', () => {
+    // Cornerstone of the SWR fix: once we have a user (even from cache),
+    // a background revalidation failure does NOT block the app. The
+    // recovery loader stays away; the reconnect banner (rendered higher
+    // up in AppShell) carries the user-facing warning instead.
+    useAuth.mockReturnValue({
+      user: { role: 'admin' },
+      loading: false,
+      authReason: null,
+      authWarning: 'RECONNECTING',
+      retryBoot: jest.fn(),
+      logout: jest.fn()
+    });
+    renderAt('/admin', { requiredRole: 'admin' });
+    expect(screen.getByText('admin-panel')).toBeInTheDocument();
+    // No recovery loader rendered.
+    expect(screen.queryByTestId('protected-route-recovery')).not.toBeInTheDocument();
+  });
+
   test('non-admin trying to hit /admin is redirected to /', () => {
     useAuth.mockReturnValue({ user: { role: 'state' }, loading: false });
     renderAt('/admin', { requiredRole: 'admin' });
