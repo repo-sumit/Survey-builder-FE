@@ -13,6 +13,30 @@ import {
   clearCache as clearLastVerifiedCache
 } from '../services/lastVerifiedUserCache';
 
+/**
+ * Opt-in debug logger. Activated by setting
+ *   localStorage.setItem('fmb:authDebug', '1')
+ * in DevTools, then reloading. Silent in production by default — keeps the
+ * shipped bundle's console clean while still allowing field debugging
+ * (e.g. for hosted-FE race-condition reports) without a redeploy.
+ *
+ * NEVER passes tokens or PII beyond what /me already returns.
+ */
+function authDebugLog(label, payload) {
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      window.localStorage &&
+      window.localStorage.getItem('fmb:authDebug') === '1'
+    ) {
+      // eslint-disable-next-line no-console
+      console.log('[AUTH_RCA]', label, payload || '');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 const AuthContext = createContext(null);
 
 /**
@@ -172,8 +196,25 @@ export function AuthProvider({ children }) {
   // used as proof of identity; the backend is still the authority on every API.
   const [hasPersistedSession] = useState(() => hasPersistedSupabaseSession());
   const supabaseSessionRef = useRef(null);
-  const resolvingRef = useRef(false);     // guard against duplicate /me calls
   const bootedRef = useRef(false);        // ensure boot only runs once
+  /**
+   * Monotonically increasing attempt id for every resolveProfile call.
+   * The race fix: after observing the hosted app land on the recovery
+   * loader even when /me returned 200 in <1s, we proved a sequencing
+   * race where an older attempt's timeout/error state-write landed AFTER
+   * a newer attempt's success. The rule now: every resolveProfile call
+   * increments this counter, captures its own attemptId, and refuses to
+   * write user/authReason/authWarning if a newer attempt has superseded
+   * it. "Latest attempt wins" — older attempts become silent no-ops.
+   *
+   * Notes:
+   *   - 401/403 from the LATEST attempt still purges normally.
+   *   - 401/403 from a STALE attempt is dropped (the newer attempt's
+   *     /me will re-discover the same authoritative state if it's real).
+   *   - A stale ME_TIMEOUT does NOT trigger the "slow — retrying once"
+   *     warning or a second /me — both would be misleading.
+   */
+  const authAttemptSeqRef = useRef(0);
   // Synchronous mirror of the user state. CRITICAL: we set this in
   // setUserSync BEFORE the React state update flushes, so the background
   // revalidation's error path (which runs in the same microtask chain as
@@ -199,11 +240,29 @@ export function AuthProvider({ children }) {
    *     a non-blocking authWarning. Authoritative failures (401, 403)
    *     still purge.
    *
+   * Sequencing: every invocation gets a unique `attemptId` via
+   * `authAttemptSeqRef`. Older attempts whose state writes would land
+   * AFTER a newer attempt has incremented the counter are dropped —
+   * see the comment on `authAttemptSeqRef`. The `source` parameter is a
+   * free-text label ('boot', 'boot-cached', 'retry', 'SIGNED_IN',
+   * 'TOKEN_REFRESHED', etc.) used for the opt-in debug log only; it does
+   * not affect behavior.
+   *
    * Always returns; never throws.
    */
-  const resolveProfile = useCallback(async ({ background = false } = {}) => {
-    if (resolvingRef.current) return null;
-    resolvingRef.current = true;
+  const resolveProfile = useCallback(async ({ background = false, source = 'unknown' } = {}) => {
+    const attemptId = authAttemptSeqRef.current + 1;
+    authAttemptSeqRef.current = attemptId;
+    const isCurrent = () => authAttemptSeqRef.current === attemptId;
+
+    let cacheHit = false;
+    try {
+      cacheHit = !!readValidCache(supabaseSessionRef.current);
+    } catch {
+      /* ignore — debug-only hint */
+    }
+    authDebugLog('me start', { attemptId, source, background, cacheHit });
+
     if (background) setIsRevalidating(true);
     try {
       let profile;
@@ -214,23 +273,76 @@ export function AuthProvider({ children }) {
         ]);
       } catch (firstErr) {
         if (firstErr?.message !== 'ME_TIMEOUT') throw firstErr;
+        // Stale-attempt guard: a newer resolveProfile has already taken
+        // over. Don't log the misleading "slow — retrying" warning, don't
+        // fire a wasted second /me, don't write any state. The newer
+        // attempt owns the outcome from here.
+        if (!isCurrent()) {
+          authDebugLog('ignored stale timeout', {
+            attemptId,
+            current: authAttemptSeqRef.current,
+            source
+          });
+          return null;
+        }
         if (process.env.NODE_ENV !== 'test') {
           // eslint-disable-next-line no-console
           console.warn('[auth] /me slow — retrying once before giving up');
         }
+        authDebugLog('me timeout, retry', { attemptId, source });
         profile = await Promise.race([
           authAPI.me(),
           deadline(ME_TIMEOUT_SECOND_MS, 'ME_TIMEOUT')
         ]);
+      }
+      if (!isCurrent()) {
+        // /me returned 200 but we've been superseded — drop the result
+        // without touching user state. The newer attempt will write the
+        // fresh profile (or surface its own outcome).
+        authDebugLog('ignored stale success', {
+          attemptId,
+          current: authAttemptSeqRef.current,
+          source
+        });
+        return null;
       }
       setUserSync(profile);
       setAuthReason(null);
       setAuthWarning(null);
       // Persist for the next boot. Only AFTER /me succeeds — never before.
       writeCache(profile, supabaseSessionRef.current);
+      authDebugLog('me success', {
+        attemptId,
+        source,
+        role: profile && profile.role
+      });
       return profile;
     } catch (err) {
       const { purge, reason, transient } = classifyMeError(err);
+      authDebugLog('me error', {
+        attemptId,
+        source,
+        background,
+        purge,
+        reason,
+        transient,
+        status: err && err.response && err.response.status
+      });
+
+      // Stale-attempt guard for errors too. An older attempt's 401 / 5xx /
+      // timeout MUST NOT clobber state if a newer attempt has started —
+      // the newer one will reach its own authoritative answer (and if the
+      // session really is bad, that newer attempt's /me will also 401 and
+      // do the purge correctly with the current sequence).
+      if (!isCurrent()) {
+        authDebugLog('ignored stale error', {
+          attemptId,
+          current: authAttemptSeqRef.current,
+          source
+        });
+        return null;
+      }
+
       if (purge) {
         // Authoritative rejection (401 / 403). Tear everything down,
         // including the cache, so the next boot can't fall back to it.
@@ -239,7 +351,7 @@ export function AuthProvider({ children }) {
         setAuthReason(reason);
         setAuthWarning(null);
       } else if (transient && background && userRef.current) {
-        // Stale-while-revalidate happy path: we have a cached user on
+        // Stale-while-revalidate happy path: we have a current user on
         // screen and the background revalidator hit a transient failure.
         // KEEP the user. KEEP the cache (the user is still valid as far
         // as the last successful /me told us). Surface a non-blocking
@@ -254,8 +366,15 @@ export function AuthProvider({ children }) {
       }
       return null;
     } finally {
-      resolvingRef.current = false;
-      if (background) setIsRevalidating(false);
+      // Only the latest attempt may flip isRevalidating off. An older
+      // attempt unwinding here while a newer one is mid-flight must not
+      // mask the newer attempt's spinner state.
+      if (background && isCurrent()) setIsRevalidating(false);
+      authDebugLog('me end', {
+        attemptId,
+        current: authAttemptSeqRef.current,
+        source
+      });
     }
   }, [setUserSync]);
 
@@ -263,7 +382,7 @@ export function AuthProvider({ children }) {
    * Run the warmup probe (bounded by WARMUP_TIMEOUT_MS) and then /me.
    * Returns when the boot pipeline has settled — never throws.
    */
-  const runWarmupThenResolve = useCallback(async ({ background = false } = {}) => {
+  const runWarmupThenResolve = useCallback(async ({ background = false, source = 'unknown' } = {}) => {
     await new Promise((resolve) => {
       let timer;
       let settled = false;
@@ -297,7 +416,7 @@ export function AuthProvider({ children }) {
         finish();
       }
     });
-    await resolveProfile({ background });
+    await resolveProfile({ background, source });
   }, [resolveProfile]);
 
   /**
@@ -336,14 +455,14 @@ export function AuthProvider({ children }) {
           // it's no longer gating the loader. Fire-and-forget; any
           // failure is captured by resolveProfile's own catch and
           // surfaced as authWarning instead of an unhandled rejection.
-          runWarmupThenResolve({ background: true }).catch(() => {});
+          runWarmupThenResolve({ background: true, source: 'boot-cached' }).catch(() => {});
           return;
         }
 
         // Branch 3: session but no valid cache — strict foreground
         // boot. Existing behavior: full-screen recovery on
         // BOOT_TIMEOUT/ERROR, /access-denied on 403, /login on 401.
-        await runWarmupThenResolve({ background: false });
+        await runWarmupThenResolve({ background: false, source: 'boot' });
       };
 
       (async () => {
@@ -383,8 +502,24 @@ export function AuthProvider({ children }) {
     if (isSupabaseConfigured && supabase) {
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
         supabaseSessionRef.current = session;
+        authDebugLog('onAuthStateChange', { event, hasSession: !!session });
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          await resolveProfile();
+          // Race fix: when the user is already on screen (live state or
+          // valid SWR cache), a TOKEN_REFRESHED — typically fired by
+          // Supabase's _recoverAndRefresh on tab focus / visibility
+          // change — must NOT run in foreground mode. A foreground
+          // revalidation that hits a transient /me failure would clobber
+          // the live user with authReason=BOOT_TIMEOUT/ERROR and bounce
+          // the app to the recovery loader. In background mode the same
+          // failure becomes a non-blocking authWarning instead.
+          //
+          // Authoritative outcomes (401, 403) still purge regardless of
+          // mode — see resolveProfile error classification.
+          const hasUser = !!userRef.current;
+          let hasValidCache = false;
+          try { hasValidCache = !!readValidCache(session); } catch { /* ignore */ }
+          const background = hasUser || hasValidCache;
+          await resolveProfile({ background, source: event });
         } else if (event === 'SIGNED_OUT') {
           clearLastVerifiedCache();
           setUserSync(null);
@@ -446,7 +581,7 @@ export function AuthProvider({ children }) {
         return;
       }
       await Promise.race([
-        runWarmupThenResolve({ background: hadUser }),
+        runWarmupThenResolve({ background: hadUser, source: 'retry' }),
         deadline(BOOT_TIMEOUT_MS, 'AUTH_BOOT_TIMEOUT')
       ]);
     } catch (err) {

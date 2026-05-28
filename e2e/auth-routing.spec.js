@@ -330,4 +330,85 @@ test.describe('Auth SWR (lastVerifiedUser cache)', () => {
     // Cached user is still visible — second 503 keeps SWR contract.
     await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible();
   });
+
+  test('race-fix: cached user + slow /me + a late retry never flashes the full-screen recovery', async ({ page }) => {
+    // Direct regression test for the hosted-app race: when there is a
+    // cached user on screen, NOTHING in the /me lifecycle — neither a
+    // 4 s delay, nor a 503 landing late, nor a user-triggered retry —
+    // may flip the route into the recovery loader. The cached-user
+    // contract is: app shell stays visible; banner is the only visible
+    // signal of trouble.
+    await seedCachedAdmin(page);
+    let meCallCount = 0;
+    await page.route('**/api/auth/me', async (route) => {
+      meCallCount += 1;
+      // First call: slow 503 (simulates the cold-BE timeout the hosted
+      // app actually observes). Subsequent calls: same — to keep the
+      // banner sticky for the duration of the test.
+      await new Promise((r) => setTimeout(r, 2_500));
+      return route.fulfill({
+        status: 503, contentType: 'application/json',
+        body: '{"error":"Database unavailable"}'
+      });
+    });
+
+    await page.goto('/admin');
+    // Cached panel renders immediately, NOT recovery.
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+
+    // After the slow 503, banner appears — admin panel stays put.
+    await expect(page.getByTestId('reconnect-banner')).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible();
+
+    // Click retry while another slow 503 is queued. The race-fix's
+    // sequence guard must keep the panel and banner; recovery must
+    // STILL not appear at any point during the retry wait.
+    await page.getByTestId('reconnect-banner-retry').click();
+    // Poll for the next /me call to land (proves the retry fired).
+    const callsAfterRetry = meCallCount;
+    await expect.poll(() => meCallCount, { timeout: 8_000 }).toBeGreaterThan(callsAfterRetry);
+    // Throughout the post-retry wait, recovery must remain absent.
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible();
+    // Cache + session preserved.
+    const cacheStillPresent = await page.evaluate((k) => !!window.localStorage.getItem(k), CACHE_KEY);
+    expect(cacheStillPresent).toBe(true);
+  });
+
+  test('race-fix: cached user + retry succeeds → admin panel stays, banner clears, no recovery flash', async ({ page }) => {
+    // Companion to the spec above. The first /me 503s (banner appears),
+    // the retry's /me 200s. The user-facing journey: cached panel →
+    // banner appears → user clicks Retry → banner clears (warning gone)
+    // → admin panel still on screen the whole time. Recovery never
+    // appeared at any point.
+    await seedCachedAdmin(page);
+    let meCallCount = 0;
+    await page.route('**/api/auth/me', async (route) => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return route.fulfill({
+          status: 503, contentType: 'application/json',
+          body: '{"error":"Database unavailable"}'
+        });
+      }
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ user: ADMIN })
+      });
+    });
+
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByTestId('reconnect-banner')).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+
+    await page.getByTestId('reconnect-banner-retry').click();
+    // After retry's 200, banner must disappear.
+    await expect(page.getByTestId('reconnect-banner')).toHaveCount(0, { timeout: 8_000 });
+    await expect(page.getByRole('heading', { name: /Admin Panel/i })).toBeVisible();
+    // And — critically — recovery never flashed at any point.
+    await expect(page.getByTestId('protected-route-recovery')).toHaveCount(0);
+  });
 });

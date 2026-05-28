@@ -748,3 +748,367 @@ describe('AuthContext bootstrap — React 18 StrictMode (Phase 5.6 regression)',
     expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
   });
 });
+
+/**
+ * Race-condition regressions covered here:
+ *
+ *   1. A stale (older) attempt's negative outcome must NOT clobber a newer
+ *      attempt's positive outcome (or its in-progress cached-user shell).
+ *      The mechanism is the `authAttemptSeqRef` counter in AuthContext —
+ *      every resolveProfile increments it and refuses to write state if
+ *      a newer attempt has superseded it.
+ *
+ *   2. A `TOKEN_REFRESHED` (or `SIGNED_IN`) event fired by Supabase while
+ *      a cached/live user is on screen must run in BACKGROUND mode, so
+ *      that a transient /me failure surfaces as `RECONNECTING` (banner)
+ *      instead of `BOOT_TIMEOUT`/`ERROR` (full-screen recovery).
+ *
+ * The mock from the top of this file captures `onAuthStateChange`'s
+ * callback in `supabaseMod.__listeners`. Each test fires events directly
+ * against that listener, simulating what Supabase's GoTrueClient would
+ * do on tab focus / token rotation.
+ */
+describe('AuthContext race-condition sequencing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    sessionStorage.clear();
+    // Reset captured listeners between tests so each suite's
+    // onAuthStateChange handler is the one we expect to fire.
+    supabaseMod.__listeners.length = 0;
+  });
+  // Backstop: any test that activates fake timers MUST leave the suite
+  // back on real timers, otherwise the next test's waitFor (which uses
+  // setInterval internally) hangs and the body stays empty.
+  afterEach(() => { jest.useRealTimers(); });
+
+  test('stale ME_TIMEOUT from an older attempt does NOT clobber a newer /me success', async () => {
+    // Scenario:
+    //   - Attempt 1 starts (foreground, no cache). Its /me is a Promise
+    //     we keep open, then later reject with ME_TIMEOUT to simulate the
+    //     deadline firing well after a newer attempt has settled.
+    //   - Attempt 2 starts (manually-triggered SIGNED_IN). Its /me
+    //     resolves fast with an admin profile.
+    //   - The stale-attempt guard MUST prevent Attempt 1's late
+    //     ME_TIMEOUT from re-firing a retry /me OR setting user=null /
+    //     authReason='BOOT_TIMEOUT'.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+
+    let rejectMeFirst;
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return new Promise((_, reject) => { rejectMeFirst = reject; });
+      }
+      return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+    });
+
+    renderApp();
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+
+    // Fire SIGNED_IN to start Attempt 2.
+    await act(async () => {
+      await supabaseMod.__listeners[0]('SIGNED_IN', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok'
+      });
+    });
+    expect(meCallCount).toBe(2);
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+
+    // Now make Attempt 1's deadline finally fire — but it's stale.
+    await act(async () => {
+      rejectMeFirst(Object.assign(new Error('ME_TIMEOUT'), { message: 'ME_TIMEOUT' }));
+      // Flush microtasks so the catch block runs.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    // No third /me — the stale-attempt guard suppresses the retry.
+    expect(meCallCount).toBe(2);
+  });
+
+  test('stale ME_TIMEOUT from an older attempt does NOT replace a cached user with BOOT_TIMEOUT', async () => {
+    // Scenario mirrors the hosted-app report: cached profile renders
+    // (Branch 2), background /me is slow, a TOKEN_REFRESHED fires and
+    // its /me resolves fast. The old background ME_TIMEOUT that lands
+    // afterwards must not flip the screen into recovery.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+
+    let rejectMeFirst;
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return new Promise((_, reject) => { rejectMeFirst = reject; });
+      }
+      return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+    });
+
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+
+    // Fire TOKEN_REFRESHED — handler sees the cached user, switches to
+    // background mode, and starts Attempt 2.
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    expect(meCallCount).toBe(2);
+
+    // Attempt 1's deadline finally rejects — but it's stale.
+    await act(async () => {
+      rejectMeFirst(Object.assign(new Error('ME_TIMEOUT'), { message: 'ME_TIMEOUT' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(meCallCount).toBe(2);
+  });
+
+  test('TOKEN_REFRESHED with a cached user uses BACKGROUND mode — transient /me failure sets RECONNECTING, not recovery', async () => {
+    // The core of the hosted-app fix: even when /me fails transiently
+    // for the TOKEN_REFRESHED revalidation, the cached user MUST stay
+    // on screen with the banner — not get bounced into recovery.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    // First (boot-cached SWR) /me succeeds; second (TOKEN_REFRESHED) /me 503s.
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+      return Promise.reject({ response: { status: 503 } });
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    // Background SWR finished cleanly — no warning yet.
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('none'));
+
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+  });
+
+  test('TOKEN_REFRESHED with a cached user + /me 200 updates user/cache and never shows recovery', async () => {
+    seedCache({ id: 1, role: 'state', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    // Both /me calls succeed; the second returns a role bump (state → admin).
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) return Promise.resolve({ id: 1, role: 'state', email: 'a@b.com' });
+      return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('state'));
+
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    // Cache must reflect the revalidated profile.
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    expect(cached.user.role).toBe('admin');
+  });
+
+  test('TOKEN_REFRESHED with a cached user + ME_TIMEOUT (twice) keeps user and sets RECONNECTING', async () => {
+    // The TOKEN_REFRESHED revalidation hits the deadline once, retries,
+    // and the retry ALSO hits the deadline. In background mode with a
+    // cached user on screen, this MUST set authWarning='RECONNECTING'
+    // and KEEP the cached user — not promote to authReason / recovery.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    // First /me (boot SWR) succeeds.
+    // Second and third /me (TOKEN_REFRESHED + retry) both reject ME_TIMEOUT.
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) {
+        return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+      }
+      return Promise.reject(Object.assign(new Error('ME_TIMEOUT'), { message: 'ME_TIMEOUT' }));
+    });
+
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+    // /me #2 (first deadline) + /me #3 (retry inside same attempt).
+    expect(meCallCount).toBeGreaterThanOrEqual(3);
+  });
+
+  test('TOKEN_REFRESHED without a cached/current user falls back to FOREGROUND mode', async () => {
+    // No cache, no user: the handler must NOT silently swallow a real
+    // boot failure under the "background" banner. Foreground mode still
+    // surfaces the recovery contract for first-time-boot scenarios.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    // Boot /me 503 (foreground): drops user, sets ERROR.
+    // TOKEN_REFRESHED /me 503 (also foreground because no user/cache): same.
+    authAPI.me.mockRejectedValue({ response: { status: 503 } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('ERROR'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+
+    // Confirm TOKEN_REFRESHED still routes to foreground recovery, not banner.
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    expect(screen.getByTestId('reason').textContent).toBe('ERROR');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    expect(screen.getByTestId('user').textContent).toBe('null');
+  });
+
+  test('TOKEN_REFRESHED with cached user + /me 401 still purges everything (authoritative outcome regardless of mode)', async () => {
+    // Background mode does NOT mean transient-only. A 401 is authoritative
+    // — the token is no good — and must purge even when the user is on
+    // screen from cache. Otherwise we'd happily keep replaying a dead
+    // session for the next 8 hours of TTL.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+      return Promise.reject({ response: { status: 401 } });
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('null'));
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+  });
+
+  test('TOKEN_REFRESHED with cached user + /me 403 NOT_INVITED clears cache and surfaces access-denied reason', async () => {
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+      return Promise.reject({ response: { status: 403, data: { error: 'NOT_INVITED' } } });
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('NOT_INVITED'));
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+    expect(supabaseMod.signOutSupabase).toHaveBeenCalled();
+  });
+
+  test('foreground first-boot (no cache) still settles into recovery on a real timeout', async () => {
+    // Regression guard for the SWR fix: the race-fix must not weaken the
+    // legitimate full-screen recovery path for users who genuinely have
+    // no cached identity yet. Both /me attempts inside the staged retry
+    // reject with ME_TIMEOUT — the foreground path must land on
+    // authReason='BOOT_TIMEOUT', user=null.
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue(Object.assign(new Error('ME_TIMEOUT'), { message: 'ME_TIMEOUT' }));
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('reason').textContent).toBe('BOOT_TIMEOUT'));
+    expect(screen.getByTestId('loading').textContent).toBe('false');
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+    // Two /me attempts — first deadline + retry.
+    expect(authAPI.me).toHaveBeenCalledTimes(2);
+  });
+
+  test('debug logger is silent unless the fmb:authDebug flag is set', async () => {
+    // Belt-and-braces guard so a future caller can't accidentally enable
+    // console noise in production. The flag is opt-in via localStorage.
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ id: 1, role: 'admin', email: 'a@b.com' });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    const debugCalls = logSpy.mock.calls.filter(
+      (call) => call[0] === '[AUTH_RCA]'
+    );
+    expect(debugCalls.length).toBe(0);
+    logSpy.mockRestore();
+  });
+
+  test('debug logger emits structured events when fmb:authDebug=1', async () => {
+    localStorage.setItem('fmb:authDebug', '1');
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ id: 1, role: 'admin', email: 'a@b.com' });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    const debugCalls = logSpy.mock.calls.filter(
+      (call) => call[0] === '[AUTH_RCA]'
+    );
+    // At least: me start, me success, me end.
+    const labels = debugCalls.map((call) => call[1]);
+    expect(labels).toEqual(expect.arrayContaining(['me start', 'me success', 'me end']));
+    // No token strings in any payload.
+    const serialized = JSON.stringify(debugCalls);
+    expect(serialized).not.toContain('tok');
+    logSpy.mockRestore();
+  });
+});
