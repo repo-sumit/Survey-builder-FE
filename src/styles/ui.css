@@ -21,7 +21,21 @@
   grid-template-columns: 1fr;
   grid-template-rows: auto 1fr;
 }
-.fmb-main-pane { min-width: 0; overflow-x: hidden; }
+/*
+ * Main pane.
+ *
+ * Owns its own padding now that the legacy `.main-content` class has been
+ * removed from the JSX (see App.jsx for why). Pages render their own
+ * top-level container (`fmb-ap-page`, `fmb-sl-page`, etc.) which is
+ * expected to span the pane width — no inner max-width is forced here,
+ * so individual screens can opt in to a centered max-width via
+ * `.fmb-main-inner` if/when they want it.
+ */
+.fmb-main-pane {
+  min-width: 0;
+  overflow-x: hidden;
+  padding: var(--s-7) var(--s-7) 96px;
+}
 .fmb-main-inner {
   max-width: 1280px;
   margin: 0 auto;
@@ -1837,8 +1851,126 @@
   }
   .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-brand { justify-content: center; padding: 6px 0 18px; }
   .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item { justify-content: center; padding: 8px; }
+  .fmb-main-pane { padding: var(--s-6) var(--s-5) 80px; }
   .fmb-main-inner { padding: var(--s-6) var(--s-5) 80px; }
 }
+
+/* ── Responsive — mobile: sidebar becomes a slim sticky top bar ────
+ *
+ * Below 720px the icon-rail still feels heavy (eats 64px of a 390px
+ * viewport and forces tables / forms into a narrow column). Instead we
+ * flip the shell to single-column, lay the sidebar out as a horizontal
+ * sticky top bar carrying just the icons + sign-out, and let main fill
+ * the full viewport width.
+ *
+ * Nothing in the JSX changes — the sidebar's existing `<Link>` items,
+ * sign-out button, and brand are rebound into a row with CSS. Sections
+ * with text-only content (search box, section titles, brand sub-line,
+ * user name) hide on this breakpoint; the icons remain tappable and
+ * keep their aria-current="page" semantics for active-route hinting.
+ */
+@media (max-width: 720px) {
+  .fmb-app-shell:not([data-nav="top"]) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar {
+    --ui-nav-w: auto;
+    flex-direction: row;
+    align-items: center;
+    height: 52px;
+    min-height: 52px;
+    width: 100%;
+    padding: 6px 12px;
+    gap: 6px;
+    border-right: none;
+    border-bottom: 1px solid var(--border, #e6e3da);
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--surface-2);
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Brand keeps the logo but drops the wordmark text. */
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-brand {
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-brand > div { display: none; }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-brand img { width: 24px; height: 24px; }
+  /* Section titles + spacer have no place on a single-row top bar. */
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-section-title,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-spacer,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-search-box,
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-user-meta {
+    display: none;
+  }
+  /* Each nav-section becomes a tight horizontal cluster. */
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-section {
+    display: inline-flex;
+    flex-direction: row;
+    padding: 0;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item {
+    padding: 8px 10px;
+    flex-shrink: 0;
+  }
+  /* Active-nav left bar doesn't make sense in a horizontal row — drop it. */
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item[aria-current="page"]::before {
+    display: none;
+  }
+  /* Active nav state in horizontal bar — underline-style instead. */
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar .fmb-nav-item[aria-current="page"] {
+    box-shadow: inset 0 -2px 0 var(--brand);
+  }
+  /* User block keeps just the avatar + sign-out icon. */
+  .fmb-app-shell:not([data-nav="top"]) .fmb-sidebar-user {
+    border-top: none;
+    margin-left: auto;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .fmb-main-pane { padding: var(--s-5) var(--s-4) 80px; }
+  .fmb-main-inner { padding: var(--s-5) var(--s-4) 80px; }
+}
+
+/* ── ReconnectBanner positioning ─────────────────────────────────
+ *
+ * Banner now lives inside <main>. Force it flush to the top of the main
+ * pane (no margin) and negate the pane's own top padding when present
+ * so it spans edge-to-edge. The banner sits sticky inside the scrollable
+ * pane so it stays in view during long-page scroll without jumping out
+ * of layout when AuthContext settles back to a clean state.
+ */
+.fmb-main-pane > [data-testid="reconnect-banner"] {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  margin: calc(var(--s-5) * -1) calc(var(--s-7) * -1) var(--s-5);
+}
+@media (max-width: 1000px) {
+  .fmb-main-pane > [data-testid="reconnect-banner"] {
+    margin: calc(var(--s-5) * -1) calc(var(--s-5) * -1) var(--s-5);
+  }
+}
+@media (max-width: 720px) {
+  .fmb-main-pane > [data-testid="reconnect-banner"] {
+    margin: calc(var(--s-5) * -1) calc(var(--s-4) * -1) var(--s-5);
+  }
+}
+
+/* AdminPanel-specific responsive rules live AFTER the .fmb-ap-* base
+ * declarations (around L3800+ in this file). They are intentionally
+ * placed at the end of the AdminPanel block so the @media rules win on
+ * source order — putting them here would lose the cascade fight against
+ * the unprefixed `.fmb-ap-section-head.with-actions { flex-direction:
+ * row }` declared later in the file. See the block at the very bottom
+ * of this file for the actual mobile rules. */
 
 /* ============================================================
    Question Form (Phase 8B)
@@ -4200,4 +4332,80 @@
 @media (max-width: 640px) {
   .fmb-ap-toolbar { flex-direction: column; align-items: stretch; }
   .fmb-ap-toolbar .btn { width: 100%; justify-content: center; }
+}
+
+/* ── PageHeader responsive ───────────────────────────────────────
+ *
+ * The base `.fmb-page-header` is `display: flex; align-items:
+ * flex-end; justify-content: space-between` — fine on desktop but
+ * squeezes the title against the actions at narrow widths. Stack
+ * vertically on mobile and let the actions row become a wrap-friendly
+ * full-width strip.
+ */
+@media (max-width: 720px) {
+  .fmb-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-3);
+  }
+  .fmb-page-header > div:first-child { width: 100%; min-width: 0; }
+  .fmb-page-header .fmb-page-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  /*
+   * Polish: action buttons keep their natural content width and WRAP to a
+   * new row when they overflow, instead of being forced to `flex: 1` and
+   * clipping mid-word (the symptom seen on /surveys/:id/questions where
+   * 4 actions — "Back to Surveys", "Preview Survey", "Export to Excel",
+   * "Add Question" — were compressed to ~90px each at 390px width).
+   *
+   * `white-space: nowrap` is belt-and-braces against the legacy `.btn`
+   * rule which already uses inline-flex; it guarantees button labels
+   * don't word-wrap mid-button if a future style adds it.
+   */
+  .fmb-page-header .fmb-page-actions .btn {
+    flex: 0 0 auto;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .fmb-page-title { font-size: 22px; }
+}
+
+/* ── AdminPanel responsive — final overrides ─────────────────────
+ *
+ * Source-order matters here: these rules MUST come AFTER all of the
+ * `.fmb-ap-*` base declarations so they win the cascade against the
+ * unprefixed defaults (e.g. `.fmb-ap-section-head.with-actions {
+ * flex-direction: row }`). Splitting responsive AdminPanel rules
+ * across two locations in this file is the source of the
+ * "Add User button overlaps the section title" bug on mobile.
+ */
+@media (min-width: 721px) and (max-width: 1023px) {
+  /* Tablet: 2-col metrics for a denser top-of-panel summary. */
+  .fmb-ap-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .fmb-ap-page { gap: var(--s-4); }
+  .fmb-ap-section { padding: var(--s-4) var(--s-4); }
+  /* Title + actions stack on mobile. Button becomes a full-width primary
+   * so it can't overlap a wrapped section title. */
+  .fmb-ap-section-head.with-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .fmb-ap-section-head.with-actions > div { width: 100%; min-width: 0; }
+  .fmb-ap-toolbar { width: 100%; }
+  .fmb-ap-toolbar .btn { flex: 1; justify-content: center; }
+  /* Tab labels stay readable; tablist already scrolls horizontally. */
+  .fmb-ap-tab { padding: 10px 12px; font-size: 12.5px; }
+  .fmb-ap-tab-count { min-width: 18px; height: 16px; }
+  /* Tighter table cells on mobile — table itself stays horizontally
+   * scrollable inside .fmb-ap-table-wrap (min-width: 720px). */
+  .fmb-ap-table thead th,
+  .fmb-ap-table tbody td { padding: 8px 10px; }
+  /* Metric tiles can shrink to 110px on the narrow viewport. */
+  .fmb-ap-metrics { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--s-2); }
+  .fmb-ap-metric-value { font-size: 20px; }
 }

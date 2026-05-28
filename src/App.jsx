@@ -184,8 +184,18 @@ function AppShell({ children }) {
   const isTop = tweaks.nav === 'top';
 
   return (
+    // Note: the legacy `.app` class is intentionally NOT applied here. Both
+    // `.app` (display:flex; flex-direction:row + @media collapse to column)
+    // and `.fmb-app-shell` (display:grid; grid-template-columns: nav 1fr)
+    // were previously on this root and fought each other in the cascade —
+    // App.css loads AFTER ui.css, so `.app`'s flex won, the `.fmb-app-shell`
+    // grid lost its column track, and at <768px `.app { flex-direction:
+    // column }` stacked the sidebar above main full-width. Same story for
+    // `.main-content` on <main>: its 2.5rem/2rem padding masked the shell's
+    // own paddings and the @media rules collided. Both classes are now
+    // owned exclusively by `.fmb-app-shell` / `.fmb-main-pane`.
     <div
-      className={isTop ? 'fmb-app-shell' : 'app fmb-app-shell'}
+      className="fmb-app-shell"
       data-nav={isTop ? 'top' : 'side'}
     >
       {/* Tweaks feature disabled — onTweaksOpen prop intentionally omitted so
@@ -196,12 +206,19 @@ function AppShell({ children }) {
         ? <TopNav  onSearchOpen={() => setCmdOpen(true)} />
         : <Sidebar onSearchOpen={() => setCmdOpen(true)} />}
 
-      {/* Non-blocking reconnect banner. Renders null unless AuthContext
-          is in the stale-while-revalidate "RECONNECTING" state. Mounted
-          above main so it doesn't shift the route content. */}
-      <ReconnectBanner />
+      <main className="fmb-main-pane">
+        {/*
+          Non-blocking reconnect banner. Renders null unless AuthContext
+          is in the stale-while-revalidate "RECONNECTING" state.
 
-      <main className="main-content fmb-main-pane">
+          It MUST live inside <main> — when it was a direct grid sibling of
+          Sidebar/Main/CommandPalette in the 2-column shell, CSS Grid's
+          auto-placement filled (row 1, col 2) with the banner and pushed
+          Main into (row 2, col 1), the 240px sidebar column. That produced
+          the hosted-app symptom: "main mostly empty, content squeezed into
+          a narrow column, banner floating in middle of empty canvas".
+        */}
+        <ReconnectBanner />
         {children}
       </main>
 
