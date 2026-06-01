@@ -14,11 +14,11 @@ const VALIDATION_CHECKLIST_URL =
   'https://docs.google.com/spreadsheets/d/1tgkxMGBzqBcmSF6dx3BSgqkobmzq_v2STFYM0f-tZk0/edit?usp=sharing';
 
 const STATE_USER_NAV = [
-  { to: '/',             label: 'Surveys',     icon: 'layout',    match: (p) => p === '/' || p.startsWith('/surveys') },
-  { to: '/import',       label: 'Import',      icon: 'upload' },
-  { to: '/validator',    label: 'Validator',   icon: 'shield' },
-  { to: '/designations', label: 'Designations',icon: 'users' },
-  { to: '/access-sheet', label: 'Access Sheet',icon: 'key' },
+  { to: '/',             label: 'Surveys',      icon: 'layout',    match: (p) => p === '/' || p.startsWith('/surveys') },
+  { to: '/import',       label: 'Import',       icon: 'upload' },
+  { to: '/validator',    label: 'Validator',    icon: 'shield' },
+  { to: '/designations', label: 'Designations', icon: 'users' },
+  { to: '/access-sheet', label: 'Access Sheet', icon: 'key' },
 ];
 
 const ADMIN_NAV = [
@@ -33,7 +33,8 @@ const isActive = (pathname, item) => {
 const TopNav = ({ onSearchOpen, onTweaksOpen }) => {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
-  const items = user?.role === 'admin' ? ADMIN_NAV : STATE_USER_NAV;
+  const isAdmin = user?.role === 'admin';
+  const items = isAdmin ? ADMIN_NAV : STATE_USER_NAV;
   const displayName = user?.name || user?.email || user?.username || 'User';
   const initials = (displayName.slice(0, 2) || '?').toUpperCase();
 
@@ -73,21 +74,21 @@ const TopNav = ({ onSearchOpen, onTweaksOpen }) => {
       <div className="fmb-topnav-spacer" />
 
       {onSearchOpen && (
+        // Role-aware command-palette trigger. See Sidebar.jsx for the
+        // rationale — same compact button pattern, same global ⌘K hook,
+        // no nested <input> inside <button>.
         <button
           type="button"
-          className="fmb-search-box"
+          className="fmb-cmd-trigger fmb-cmd-trigger--topnav"
           onClick={onSearchOpen}
-          aria-label="Open command palette"
-          style={{ maxWidth: 280, padding: 0, background: 'transparent', border: 'none' }}
+          aria-label={isAdmin ? 'Open admin command palette' : 'Open survey command palette'}
+          data-testid="topnav-cmd-trigger"
         >
           <Icon name="search" />
-          <input
-            placeholder="Search…"
-            readOnly
-            tabIndex={-1}
-            onFocus={(e) => { e.target.blur(); onSearchOpen(); }}
-          />
-          <span className="fmb-kbd">⌘K</span>
+          <span className="fmb-cmd-trigger-label">
+            {isAdmin ? 'Search admin tools' : 'Search surveys'}
+          </span>
+          <span className="fmb-cmd-trigger-kbd" aria-hidden="true">⌘K</span>
         </button>
       )}
 

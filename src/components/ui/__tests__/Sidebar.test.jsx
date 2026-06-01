@@ -33,7 +33,10 @@ describe('Sidebar — role gating', () => {
     // Workspace
     expect(screen.getByRole('link', { name: /^Surveys$/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Import$/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Dumpsheet Validator/i })).toBeInTheDocument();
+    // Label shortened from "Dumpsheet Validator" → "Validator" to match
+    // the visual weight of the other Workspace items at 240px. The route
+    // is unchanged (/validator).
+    expect(screen.getByRole('link', { name: /^Validator$/i })).toBeInTheDocument();
     // Configuration
     expect(screen.getByRole('link', { name: /^Designations$/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Access Sheet$/i })).toBeInTheDocument();
@@ -89,5 +92,85 @@ describe('Sidebar — role gating', () => {
     // Sibling items should not be marked current
     expect(screen.getByRole('link', { name: /^Surveys$/i }))
       .not.toHaveAttribute('aria-current');
+  });
+});
+
+describe('Sidebar — command-palette trigger', () => {
+  beforeEach(() => useAuth.mockReset());
+
+  test('admin role: trigger is a real button with admin-appropriate aria-label and copy', () => {
+    useAuth.mockReturnValue({
+      user: { username: 'admin', role: 'admin', isActive: true },
+      logout: jest.fn(),
+    });
+    renderAt('/admin');
+
+    const trigger = screen.getByTestId('sidebar-cmd-trigger');
+    // Must be a real <button>, not a button wrapping a readonly <input>.
+    expect(trigger.tagName).toBe('BUTTON');
+    expect(trigger.getAttribute('aria-label')).toMatch(/admin command palette/i);
+    expect(trigger).toHaveTextContent(/Search admin tools/i);
+    // No nested input inside the trigger (the old pattern).
+    expect(trigger.querySelector('input')).toBeNull();
+  });
+
+  test('state role: trigger uses survey-related copy', () => {
+    useAuth.mockReturnValue({
+      user: { username: 'priya', role: 'state', stateCode: 'GJ', isActive: true },
+      logout: jest.fn(),
+    });
+    renderAt('/');
+
+    const trigger = screen.getByTestId('sidebar-cmd-trigger');
+    expect(trigger.tagName).toBe('BUTTON');
+    expect(trigger.getAttribute('aria-label')).toMatch(/survey command palette/i);
+    expect(trigger).toHaveTextContent(/Search surveys/i);
+    expect(trigger.querySelector('input')).toBeNull();
+  });
+
+  test('trigger click invokes onSearchOpen', () => {
+    const onSearchOpen = jest.fn();
+    useAuth.mockReturnValue({
+      user: { username: 'p', role: 'state', stateCode: 'MH', isActive: true },
+      logout: jest.fn(),
+    });
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar onSearchOpen={onSearchOpen} />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByTestId('sidebar-cmd-trigger'));
+    expect(onSearchOpen).toHaveBeenCalledTimes(1);
+  });
+
+  test('trigger is omitted when onSearchOpen prop is not supplied', () => {
+    useAuth.mockReturnValue({
+      user: { username: 'p', role: 'state', stateCode: 'MH', isActive: true },
+      logout: jest.fn(),
+    });
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar />
+      </MemoryRouter>
+    );
+    expect(screen.queryByTestId('sidebar-cmd-trigger')).not.toBeInTheDocument();
+  });
+});
+
+describe('Sidebar — resources section', () => {
+  beforeEach(() => useAuth.mockReset());
+
+  test('resource label is "Validation Checklist" (the long "FMB" prefix was wrapping at 240px)', () => {
+    useAuth.mockReturnValue({
+      user: { username: 'p', role: 'state', stateCode: 'MH', isActive: true },
+      logout: jest.fn(),
+    });
+    renderAt('/');
+    const link = screen.getByRole('link', { name: /Validation Checklist/i });
+    // Visible text must NOT carry the legacy "FMB " prefix.
+    expect(link.textContent).not.toMatch(/^\s*FMB\s+Validation/);
+    // Carries the secondary-weight modifier so it doesn't compete with
+    // primary nav items visually.
+    expect(link.className).toMatch(/fmb-nav-item--secondary/);
   });
 });

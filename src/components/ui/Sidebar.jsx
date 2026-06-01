@@ -20,12 +20,17 @@ import Icon from './Icon';
 
 // Two-section nav: "Workspace" (everyday flows) and "Configuration"
 // (admin / system tools). Mirrors the design handoff's grouping.
+//
+// Label note: "Dumpsheet Validator" used to be the full label, which
+// wrapped awkwardly at 240px and gave the workspace section uneven visual
+// weight against the shorter "Surveys" / "Import" items. The route still
+// targets /validator unchanged — this is a label-only change.
 const STATE_USER_NAV = [
-  { to: '/',             label: 'Surveys',             icon: 'layout',    group: 'work',   match: (p) => p === '/' || p.startsWith('/surveys') },
-  { to: '/import',       label: 'Import',              icon: 'upload',    group: 'work' },
-  { to: '/validator',    label: 'Dumpsheet Validator', icon: 'shield',    group: 'work' },
-  { to: '/designations', label: 'Designations',        icon: 'users',     group: 'config' },
-  { to: '/access-sheet', label: 'Access Sheet',        icon: 'key',       group: 'config' },
+  { to: '/',             label: 'Surveys',      icon: 'layout',    group: 'work',   match: (p) => p === '/' || p.startsWith('/surveys') },
+  { to: '/import',       label: 'Import',       icon: 'upload',    group: 'work' },
+  { to: '/validator',    label: 'Validator',    icon: 'shield',    group: 'work' },
+  { to: '/designations', label: 'Designations', icon: 'users',     group: 'config' },
+  { to: '/access-sheet', label: 'Access Sheet', icon: 'key',       group: 'config' },
 ];
 
 const ADMIN_NAV = [
@@ -81,21 +86,26 @@ const Sidebar = ({ onSearchOpen, onTweaksOpen }) => {
       </Link>
 
       {onSearchOpen && (
+        // Role-aware command-palette trigger. Replaces a previous pattern
+        // that nested a readonly <input> inside a <button>, which was both
+        // visually fragile (the placeholder + ⌘K chip routinely clipped
+        // inside the 240px sidebar) and a known a11y smell (nested
+        // interactive controls). The new trigger is a plain button styled
+        // to look like a calm hint with a kbd chip on the right. The
+        // existing CommandPalette behavior + ⌘K global shortcut are
+        // unchanged.
         <button
           type="button"
-          className="fmb-search-box"
+          className="fmb-cmd-trigger"
           onClick={onSearchOpen}
-          aria-label="Open command palette"
-          style={{ marginBottom: 8, padding: 0, background: 'transparent', border: 'none', display: 'block', maxWidth: 'none' }}
+          aria-label={isAdmin ? 'Open admin command palette' : 'Open survey command palette'}
+          data-testid="sidebar-cmd-trigger"
         >
           <Icon name="search" />
-          <input
-            placeholder="Search surveys, questions…"
-            readOnly
-            tabIndex={-1}
-            onFocus={(e) => { e.target.blur(); onSearchOpen(); }}
-          />
-          <span className="fmb-kbd">⌘K</span>
+          <span className="fmb-cmd-trigger-label">
+            {isAdmin ? 'Search admin tools' : 'Search surveys'}
+          </span>
+          <span className="fmb-cmd-trigger-kbd" aria-hidden="true">⌘K</span>
         </button>
       )}
 
@@ -123,11 +133,18 @@ const Sidebar = ({ onSearchOpen, onTweaksOpen }) => {
           href={VALIDATION_CHECKLIST_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="fmb-nav-item"
+          // Secondary modifier renders this with a slightly smaller font
+          // and a muted colour so the resource link doesn't compete with
+          // primary navigation items (Surveys, Import, Admin Panel…).
+          // The label is now "Validation Checklist" — the "FMB" prefix
+          // wrapped to a second line at 240px and the brand context is
+          // already established by the top-of-sidebar wordmark.
+          className="fmb-nav-item fmb-nav-item--secondary"
+          aria-label="Open Validation Checklist in a new tab"
         >
           <Icon name="fileCheck" />
-          <span>FMB Validation Checklist</span>
-          <Icon name="external" size={12} style={{ marginLeft: 'auto', color: 'var(--text-4, #9b9aa1)' }} />
+          <span>Validation Checklist</span>
+          <Icon name="external" size={11} style={{ marginLeft: 'auto', color: 'var(--text-4, #9b9aa1)' }} aria-hidden="true" />
         </a>
       </div>
 
