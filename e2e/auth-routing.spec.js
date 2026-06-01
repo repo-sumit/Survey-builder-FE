@@ -268,6 +268,18 @@ test.describe('Auth SWR (lastVerifiedUser cache)', () => {
 
   test('background /me 503 with cached profile shows reconnect banner, panel stays visible', async ({ page }) => {
     await seedCachedAdmin(page);
+    // Block the auth-healthy auto-clear pathway so the banner stays
+    // visible long enough to lock the contract here. (Once an admin/*
+    // endpoint returns 200, api.js dispatches `fmb:auth-healthy` and
+    // AuthContext auto-clears the banner — that "stuck banner fix" has
+    // its own dedicated test below; here we want to verify the banner
+    // contract itself.)
+    await page.route('**/api/admin/state-config', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' })
+    );
+    await page.route('**/api/admin/users', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' })
+    );
     await page.route('**/api/auth/me', (r) =>
       r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"Database unavailable"}' })
     );
@@ -314,6 +326,15 @@ test.describe('Auth SWR (lastVerifiedUser cache)', () => {
 
   test('Retry from the reconnect banner triggers another /me call', async ({ page }) => {
     await seedCachedAdmin(page);
+    // Block admin/* 200s so the auth-healthy auto-clear does not fire —
+    // we need the banner to stay visible long enough for the user's
+    // Retry click. The stuck-banner auto-clear has its own test.
+    await page.route('**/api/admin/state-config', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' })
+    );
+    await page.route('**/api/admin/users', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' })
+    );
     let meCallCount = 0;
     await page.route('**/api/auth/me', (r) => {
       meCallCount += 1;
@@ -384,6 +405,15 @@ test.describe('Auth SWR (lastVerifiedUser cache)', () => {
     // → admin panel still on screen the whole time. Recovery never
     // appeared at any point.
     await seedCachedAdmin(page);
+    // Block admin/* 200s so the banner does not auto-clear via the
+    // fmb:auth-healthy side-channel; this test specifically validates
+    // that the user's Retry click clears the banner, not the side-channel.
+    await page.route('**/api/admin/state-config', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' })
+    );
+    await page.route('**/api/admin/users', (r) =>
+      r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"x"}' })
+    );
     let meCallCount = 0;
     await page.route('**/api/auth/me', async (route) => {
       meCallCount += 1;

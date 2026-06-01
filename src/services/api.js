@@ -58,7 +58,53 @@ const on401Refresh = createOn401Refresh({
   request: (config) => axios(config)
 });
 
-axios.interceptors.response.use(response => response, on401Refresh);
+/**
+ * Auth-healthy signal.
+ *
+ * The reconnect banner appears when /api/auth/me fails transiently. It is
+ * cleared on (a) a successful /me revalidation, (b) the user clicking
+ * Retry or Dismiss, or (c) a TOKEN_REFRESHED event. None of those fire
+ * automatically when the user simply keeps using the app and ALL OTHER
+ * authenticated API calls succeed — so the banner can stay stuck even
+ * after the backend is clearly healthy (every admin/survey/admin call is
+ * returning 200).
+ *
+ * This interceptor fixes that: every successful 2xx response from a
+ * NON-PUBLIC endpoint is proof that:
+ *   - the BE is reachable,
+ *   - the JWT was verified (same code path that /me uses), and
+ *   - the user's session is still valid.
+ *
+ * That's a strong enough signal to clear the reconnect banner without
+ * waiting for another explicit /me round-trip. We dispatch a window-level
+ * CustomEvent so AuthContext can react without coupling the API layer to
+ * React state. The handler in AuthContext is a no-op when authWarning is
+ * already null, so the dispatch is essentially free on the happy path.
+ *
+ * Safety properties:
+ *   - We do NOT bypass /api/auth/me as authorization — every protected
+ *     route still verifies the JWT server-side.
+ *   - We do NOT change the response payload or any error handling.
+ *   - 401 / 403 / 5xx still flow through `on401Refresh` unchanged.
+ *   - Public probes (/api/health, /api/ready, /api/keep-alive) do NOT
+ *     emit the signal — a 200 there does not confirm auth.
+ */
+function dispatchAuthHealthy() {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(new CustomEvent('fmb:auth-healthy'));
+  } catch {
+    /* CustomEvent unavailable (very old browsers / jsdom edge) — silently skip. */
+  }
+}
+
+axios.interceptors.response.use((response) => {
+  const url = response && response.config && response.config.url;
+  if (url && !isPublicApiPath(url) && response.status >= 200 && response.status < 300) {
+    dispatchAuthHealthy();
+  }
+  return response;
+}, on401Refresh);
 
 // --- Auth API ---
 

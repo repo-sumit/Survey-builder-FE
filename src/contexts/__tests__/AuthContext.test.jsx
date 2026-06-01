@@ -1157,6 +1157,84 @@ describe('AuthContext race-condition sequencing', () => {
     expect(screen.getByTestId('reason').textContent).toBe('none');
   });
 
+  test('fmb:auth-healthy event clears a stale RECONNECTING banner', async () => {
+    // The "stuck banner" bug fix: a successful authenticated API call
+    // (admin/users, surveys, etc.) dispatches a window CustomEvent
+    // `fmb:auth-healthy` from api.js. AuthContext listens here and
+    // clears authWarning. This handles the case where /me failed
+    // transiently, the banner appeared, but other API calls then
+    // succeeded — proof the BE is healthy.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    // Background /me 503 raises the banner.
+    authAPI.me.mockRejectedValue({ response: { status: 503 } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+
+    // Simulate api.js dispatching fmb:auth-healthy after a successful
+    // admin API call (e.g. GET /api/admin/users returning 200).
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('fmb:auth-healthy'));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('none'));
+    // User and reason must NOT be touched — only the banner is cleared.
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+  });
+
+  test('fmb:auth-healthy event does NOT revive a user purged by 401', async () => {
+    // Safety guard: after a /me 401 has purged the session, a later
+    // stray 2xx from a request that was in-flight before the purge
+    // MUST NOT revive the user. The listener only touches authWarning;
+    // user/cache stay cleared.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({ response: { status: 401 } });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('null'));
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+
+    // Fire the event — must be a complete no-op for a purged user.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('fmb:auth-healthy'));
+    });
+
+    expect(screen.getByTestId('user').textContent).toBe('null');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+  });
+
+  test('fmb:auth-healthy event is a no-op when authWarning is already null', async () => {
+    // Clean boot path: no banner ever appears, the event fires anyway
+    // (because all admin API calls succeed), and authWarning stays null.
+    // Just verifying the listener is harmless on the happy path.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ id: 1, role: 'admin', email: 'a@b.com' });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+
+    // Fire a burst of events — none should change anything.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('fmb:auth-healthy'));
+      window.dispatchEvent(new CustomEvent('fmb:auth-healthy'));
+      window.dispatchEvent(new CustomEvent('fmb:auth-healthy'));
+    });
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+  });
+
   test('debug logger is silent unless the fmb:authDebug flag is set', async () => {
     // Belt-and-braces guard so a future caller can't accidentally enable
     // console noise in production. The flag is opt-in via localStorage.

@@ -544,6 +544,50 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Auto-recover the reconnect banner.
+   *
+   * The reconnect banner was previously sticky: once a transient /me
+   * failure raised it, it stayed visible until the user clicked Retry /
+   * Dismiss or Supabase fired a TOKEN_REFRESHED event. If the BE
+   * recovered and the user just kept using the app, every subsequent
+   * authenticated API call (admin/users, surveys, designations, …) was
+   * returning 200 — clear proof that the BE was healthy and the JWT was
+   * accepted — but the banner had no signal to clear itself.
+   *
+   * Fix: the axios response interceptor in api.js dispatches a
+   * `fmb:auth-healthy` CustomEvent on every 2xx response from a
+   * non-public endpoint. Here we listen for it and clear authWarning
+   * if it's currently RECONNECTING.
+   *
+   * Why this is safe:
+   *   - We do NOT bypass /api/auth/me as authorization — protected
+   *     routes are still gated by `requireAuth` server-side.
+   *   - We only react when a non-public endpoint returned 2xx, which
+   *     means the BE verified the same JWT that /me uses.
+   *   - We never re-grant a purged user: the listener short-circuits
+   *     if authWarning is not RECONNECTING (e.g. after a 401 purge,
+   *     authWarning is null, so a later stray 2xx cannot revive the
+   *     session).
+   *   - We do NOT touch user / authReason / cache from here — only the
+   *     banner state.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => {
+      // Snapshot via the setter callback so we never act on a stale
+      // closure of authWarning. If it's not RECONNECTING, this is a
+      // no-op state update that React will optimise away.
+      setAuthWarning((current) => {
+        if (current !== AUTH_WARNINGS.RECONNECTING) return current;
+        authDebugLog('banner auto-clear via fmb:auth-healthy', {});
+        return null;
+      });
+    };
+    window.addEventListener('fmb:auth-healthy', handler);
+    return () => window.removeEventListener('fmb:auth-healthy', handler);
+  }, []);
+
   const loginWithGoogle = useCallback(async () => {
     if (!isSupabaseConfigured) {
       throw new Error('Google sign-in is not configured.');
