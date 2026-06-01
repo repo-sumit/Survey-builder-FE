@@ -109,14 +109,21 @@ const styles = {
  *
  * `title` defaults differ by call site:
  *   - Auth bootstrap with a persisted session  → "Restoring your session…"
- *   - Auth bootstrap without a session         → "Loading…"
+ *   - Auth bootstrap without a session         → "Preparing your secure workspace"
  *   - Suspense (lazy route)                    → "Loading…"
  *   - Recovery                                 → "We couldn't confirm your access"
+ *
+ * `hasPersistedSession` switches the initial-phase copy between the two
+ * auth-bootstrap variants. Pass-through from AuthContext so the loader
+ * tells the right story: returning users see "restoring", first-time
+ * mounts see "preparing". The hint is best-effort UX only — it never
+ * influences gating or trust.
  */
 const AppLoader = ({
   title,
   subtitle,
   mode = 'loading',
+  hasPersistedSession = false,
   onRetry,
   onSignOut,
   onReload,
@@ -141,8 +148,25 @@ const AppLoader = ({
 
   const isRecovery = mode === 'recovery';
 
+  // Default title is split by hasPersistedSession so returning users get
+  // session-restore copy and first-time mounts get neutral "preparing"
+  // copy. Explicit `title` prop always wins (page-level Suspense passes
+  // "Loading…" directly).
+  const loadingDefaultTitle = hasPersistedSession
+    ? 'Restoring your session…'
+    : 'Preparing your secure workspace';
   const resolvedTitle =
-    title || (isRecovery ? "We couldn't confirm your access" : 'Loading…');
+    title || (isRecovery ? "We couldn't confirm your access" : loadingDefaultTitle);
+
+  // Initial-phase subtitle also forks on hasPersistedSession so the
+  // story matches the title. Slow/stale messages are deliberately
+  // identical regardless of session state — both phases mean "backend
+  // is slow", which is the same situation for either user.
+  const initialSubtitle = subtitle || (
+    hasPersistedSession
+      ? 'Confirming your access and preparing your workspace.'
+      : 'Please wait a moment.'
+  );
 
   const message = isRecovery
     ? (subtitle ||
@@ -156,7 +180,7 @@ const AppLoader = ({
       ? 'The backend may be waking up. On the free hosting tier this can take up to about a minute. You can wait or reload.'
       : phase === 'slow'
         ? 'Still working… the backend is warming up.'
-        : (subtitle || 'Please wait a moment.');
+        : initialSubtitle;
 
   const handleReload = () => {
     if (onReload) return onReload();

@@ -33,17 +33,62 @@ const WarnIcon = () => (
   </svg>
 );
 
+// Warmup status copy is intentionally calm and short. We deliberately
+// stay silent until ~3s because most warm boots finish faster than that
+// and any transient copy would just be visual noise / layout churn.
+const WARMUP_SLOW_THRESHOLD_MS = 3000;
+const WARMUP_READY_FADE_MS = 1500;
+
 const Login = () => {
   const [error, setError] = useState(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // 'idle' | 'warming' | 'slow' | 'ready' | 'failed'
+  const [warmupStatus, setWarmupStatus] = useState('idle');
   const { loginWithGoogle, isSupabaseConfigured, authReason, clearAuthReason } = useAuth();
 
   // Fire a fast /api/health probe so the backend wakes up while the user
   // is reading the page. This was preserved exactly from the previous
-  // Login — do not remove (see ADR 0001 §5).
+  // Login — do not remove (see ADR 0001 §5). The Google CTA is NEVER
+  // gated on this; status copy is screen-reader-friendly via aria-live.
   useEffect(() => {
-    authAPI.warmup().catch(() => {});
+    let cancelled = false;
+    setWarmupStatus('warming');
+
+    // After the slow threshold, surface gentle copy IFF still pending.
+    const slowTimer = setTimeout(() => {
+      if (cancelled) return;
+      setWarmupStatus((s) => (s === 'warming' ? 'slow' : s));
+    }, WARMUP_SLOW_THRESHOLD_MS);
+
+    let fadeTimer;
+    authAPI.warmup()
+      .then(() => {
+        if (cancelled) return;
+        setWarmupStatus('ready');
+        // Auto-fade the "ready" copy so it doesn't linger on the page.
+        fadeTimer = setTimeout(() => {
+          if (!cancelled) setWarmupStatus('idle');
+        }, WARMUP_READY_FADE_MS);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWarmupStatus('failed');
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(slowTimer);
+      clearTimeout(fadeTimer);
+    };
   }, []);
+
+  // Resolve which copy to render. 'warming' (< slow threshold) intentionally
+  // returns null to avoid layout shift on snap-fast paths — the wrapper
+  // element below still reserves vertical space.
+  let warmupCopy = null;
+  if (warmupStatus === 'slow') warmupCopy = 'Preparing your secure workspace…';
+  else if (warmupStatus === 'ready') warmupCopy = 'Workspace is ready.';
+  else if (warmupStatus === 'failed') warmupCopy = "Backend may wake after sign-in; we'll keep trying.";
 
   const handleGoogle = async () => {
     setError(null);
@@ -121,6 +166,52 @@ const Login = () => {
               </div>
             </div>
           )}
+
+          {/* Reserved-height status line. Always rendered so copy
+              appearing/disappearing never shifts the layout. aria-live
+              ensures screen readers announce the slow/ready/failed copy
+              without us having to focus-jump. */}
+          <div
+            className={`fmb-login-warmup is-${warmupStatus}`}
+            role="status"
+            aria-live="polite"
+            data-testid="login-warmup-status"
+            // Inline-style reserves the row's vertical footprint regardless
+            // of App.css being patched. Keeps the slice self-contained and
+            // guarantees zero layout shift when copy appears/disappears.
+            style={{
+              minHeight: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.85rem',
+              color: 'rgba(60, 60, 67, 0.65)',
+              marginTop: '0.5rem',
+            }}
+          >
+            {warmupCopy && (
+              <>
+                <span
+                  className="fmb-login-warmup-dot"
+                  aria-hidden="true"
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: warmupStatus === 'failed'
+                      ? 'rgba(180, 90, 60, 0.7)'
+                      : warmupStatus === 'ready'
+                        ? 'rgba(60, 160, 90, 0.75)'
+                        : 'rgba(120, 120, 130, 0.55)',
+                    animation: warmupStatus === 'slow'
+                      ? 'fmb-login-warmup-pulse 1.6s ease-in-out infinite'
+                      : 'none',
+                  }}
+                />
+                <span className="fmb-login-warmup-text">{warmupCopy}</span>
+              </>
+            )}
+          </div>
 
           <p className="fmb-login-help">Need access? Contact Sumit/Satyanshu.</p>
 

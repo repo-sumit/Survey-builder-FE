@@ -27,10 +27,15 @@ const PublicOnlyRoute = ({ children }) => {
   const { user, loading, hasPersistedSession, authReason } = useAuth();
 
   if (loading) {
+    // Persisted-session subtitle is bespoke ("you're already signed in") so
+    // we override it here; AppLoader's default subtitle is for the auth-
+    // bootstrap (Protected) flow. For the no-session case we keep an
+    // explicit "Loading…" title to preserve /Loading/-style legacy tests.
     return (
       <AppLoader
-        title={hasPersistedSession ? 'Restoring your session…' : 'Loading…'}
+        title={hasPersistedSession ? undefined : 'Loading…'}
         subtitle={hasPersistedSession ? "You're already signed in — taking you to your workspace." : undefined}
+        hasPersistedSession={hasPersistedSession}
         testId="public-only-route-loader"
       />
     );

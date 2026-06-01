@@ -1,6 +1,6 @@
 /* eslint-env jest */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import Login from '../Login';
 
 /**
@@ -144,5 +144,115 @@ describe('Login', () => {
     expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/password/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/continue as admin/i)).not.toBeInTheDocument();
+  });
+
+  /* ──────────────────────────────────────────────────────────────────
+     Warmup UX (slice: login-warmup-ux)
+     The Google CTA must NEVER be gated on warmup. Status copy appears
+     in an aria-live polite region below the button — silent below the
+     slow threshold to avoid layout churn on snap-fast paths.
+     ────────────────────────────────────────────────────────────────── */
+  describe('warmup status UX', () => {
+    test('renders a reserved-height aria-live status region from the start', () => {
+      render(<Login />);
+      const region = screen.getByTestId('login-warmup-status');
+      expect(region).toHaveAttribute('aria-live', 'polite');
+      // role="status" implies polite; keep the explicit attribute too.
+      expect(region).toHaveAttribute('role', 'status');
+    });
+
+    test('Google CTA stays enabled across every warmup state', async () => {
+      // Use a never-resolving warmup so we can drive the state machine
+      // through warming → slow without the promise interfering.
+      let resolveWarmup;
+      let rejectWarmup;
+      authAPI.warmup.mockImplementation(
+        () => new Promise((res, rej) => { resolveWarmup = res; rejectWarmup = rej; })
+      );
+      jest.useFakeTimers();
+      try {
+        render(<Login />);
+        const btn = screen.getByTestId('login-google-button');
+
+        // warming — no copy yet, button enabled.
+        expect(btn).not.toBeDisabled();
+        expect(screen.getByTestId('login-warmup-status').textContent).toBe('');
+
+        // slow — advance past the 3s threshold.
+        act(() => { jest.advanceTimersByTime(3100); });
+        expect(btn).not.toBeDisabled();
+        expect(screen.getByTestId('login-warmup-status')).toHaveTextContent(/preparing your secure workspace/i);
+
+        // ready — resolve warmup; button still enabled.
+        await act(async () => { resolveWarmup(true); });
+        expect(btn).not.toBeDisabled();
+        expect(screen.getByTestId('login-warmup-status')).toHaveTextContent(/workspace is ready/i);
+
+        // failed path on a fresh render (we can't transition from ready
+        // back to failed, so simulate the failure path independently).
+        // Cleanup pending fade timer so jest.useRealTimers() doesn't moan.
+        act(() => { jest.runOnlyPendingTimers(); });
+        // Silence unused-var lint for rejectWarmup; intentionally unused
+        // in this branch — kept for symmetry with the failure test below.
+        void rejectWarmup;
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test('shows "Preparing your secure workspace…" after the slow threshold', () => {
+      // Never-resolving warmup so the slow timer wins the race.
+      authAPI.warmup.mockImplementation(() => new Promise(() => {}));
+      jest.useFakeTimers();
+      try {
+        render(<Login />);
+        // Below the threshold: still silent.
+        act(() => { jest.advanceTimersByTime(2900); });
+        expect(screen.getByTestId('login-warmup-status').textContent).toBe('');
+        // Past the threshold: copy appears.
+        act(() => { jest.advanceTimersByTime(200); });
+        expect(screen.getByTestId('login-warmup-status'))
+          .toHaveTextContent(/preparing your secure workspace/i);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test('shows "Workspace is ready." copy on warmup success', async () => {
+      // Resolve immediately so we land in 'ready' without crossing 'slow'.
+      authAPI.warmup.mockImplementation(() => Promise.resolve(true));
+      render(<Login />);
+      await waitFor(() => {
+        expect(screen.getByTestId('login-warmup-status'))
+          .toHaveTextContent(/workspace is ready/i);
+      });
+    });
+
+    test('shows "Backend may wake after sign-in" copy on warmup failure', async () => {
+      authAPI.warmup.mockImplementation(() => Promise.reject(new Error('boot')));
+      render(<Login />);
+      await waitFor(() => {
+        expect(screen.getByTestId('login-warmup-status'))
+          .toHaveTextContent(/backend may wake after sign-in/i);
+      });
+      // CTA must remain enabled on warmup failure — the user can still
+      // sign in; the backend usually wakes during the OAuth round-trip.
+      expect(screen.getByTestId('login-google-button')).not.toBeDisabled();
+    });
+
+    test('warmup status copy does not appear inside the Google CTA label', async () => {
+      authAPI.warmup.mockImplementation(() => Promise.reject(new Error('boot')));
+      render(<Login />);
+      await waitFor(() => {
+        expect(screen.getByTestId('login-warmup-status'))
+          .toHaveTextContent(/backend may wake after sign-in/i);
+      });
+      // The CTA label stays "Continue with Google" — warmup copy lives
+      // in its own aria-live region, not inside the button.
+      const btn = screen.getByTestId('login-google-button');
+      expect(btn).toHaveTextContent(/continue with google/i);
+      expect(btn).not.toHaveTextContent(/backend may wake/i);
+      expect(btn).not.toHaveTextContent(/preparing your secure workspace/i);
+    });
   });
 });

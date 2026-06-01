@@ -24,7 +24,7 @@
  *   - Cache identity must match the current Supabase session (by
  *     supabaseUserId or email). A mismatch (e.g. user signed out + back
  *     in as someone else with cache still around) is treated as expired.
- *   - 8-hour TTL — short enough that a long-disabled account doesn't
+ *   - 12-hour TTL — short enough that a long-disabled account doesn't
  *     keep accessing the shell for days.
  *   - No tokens, no secrets, no sensitive PII beyond what /me already
  *     returns (id, role, stateCode, email, name).
@@ -35,7 +35,7 @@
  */
 
 export const CACHE_KEY = 'fmb:lastVerifiedUser:v1';
-export const CACHE_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+export const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 /**
  * Best-effort safe-stringify wrapper around localStorage so we never let a

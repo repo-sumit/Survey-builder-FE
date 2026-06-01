@@ -165,6 +165,16 @@ function classifyMeError(err) {
   }
   const status = err?.response?.status;
   const code = err?.response?.data?.error;
+  // BE signals a Supabase JWKS / identity-provider outage as
+  // 503 AUTH_INFRA_TRANSIENT. The token may be perfectly valid — only the
+  // upstream verifier is temporarily unreachable. Route through the
+  // existing transient branch so the cached user stays on screen and the
+  // reconnect banner appears, instead of letting a generic 5xx fall
+  // through (which is also transient, but this code path keeps the
+  // signal explicit and unmistakable in logs / debugging).
+  if (status === 503 && code === 'AUTH_INFRA_TRANSIENT') {
+    return { purge: false, reason: 'ERROR', transient: true };
+  }
   if (status === 401) {
     return { purge: true, reason: null, transient: false };
   }

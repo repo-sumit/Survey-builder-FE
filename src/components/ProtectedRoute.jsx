@@ -30,9 +30,14 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, loading, hasPersistedSession, authReason, retryBoot, logout } = useAuth();
 
   if (loading) {
+    // Pass `hasPersistedSession` through so AppLoader can pick the right
+    // initial-phase subtitle ("Confirming your access…" vs "Please wait
+    // a moment."). Title is explicit for the no-session case so existing
+    // /Loading/-style tests continue to match.
     return (
       <AppLoader
-        title={hasPersistedSession ? 'Restoring your session…' : 'Loading…'}
+        title={hasPersistedSession ? undefined : 'Loading…'}
+        hasPersistedSession={hasPersistedSession}
         testId="protected-route-loader"
       />
     );

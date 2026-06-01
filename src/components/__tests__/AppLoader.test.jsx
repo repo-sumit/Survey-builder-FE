@@ -112,3 +112,42 @@ describe('AppLoader — recovery mode', () => {
     expect(screen.getByTestId('app-loader-reload')).toBeInTheDocument();
   });
 });
+
+// hasPersistedSession switches the initial-phase title + subtitle pair to
+// match the returning-user vs first-time-mount narrative. Slow/stale-phase
+// copy is deliberately session-agnostic and is asserted by the existing
+// suite above — we re-check the initial-phase copy here.
+describe('AppLoader — loading mode initial-phase copy (hasPersistedSession)', () => {
+  test('hasPersistedSession=true ⇒ "Restoring your session…" + workspace-confirming subtitle', () => {
+    render(<AppLoader hasPersistedSession />);
+    expect(screen.getByText('Restoring your session…')).toBeInTheDocument();
+    expect(
+      screen.getByText('Confirming your access and preparing your workspace.')
+    ).toBeInTheDocument();
+  });
+
+  test('hasPersistedSession falsy ⇒ "Preparing your secure workspace" + "Please wait a moment."', () => {
+    render(<AppLoader />);
+    expect(screen.getByText('Preparing your secure workspace')).toBeInTheDocument();
+    expect(screen.getByText('Please wait a moment.')).toBeInTheDocument();
+  });
+
+  test('explicit title prop overrides the persisted-session default', () => {
+    // Lock the override path so route guards that still pass an explicit
+    // "Loading…" string keep rendering exactly that — no regressions for
+    // existing /Loading/ regex assertions in route tests.
+    render(<AppLoader title="Loading…" />);
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.queryByText('Preparing your secure workspace')).not.toBeInTheDocument();
+  });
+
+  test('explicit subtitle prop overrides the persisted-session default subtitle', () => {
+    render(
+      <AppLoader hasPersistedSession subtitle="You're already signed in — taking you to your workspace." />
+    );
+    expect(screen.getByText('Restoring your session…')).toBeInTheDocument();
+    expect(
+      screen.getByText("You're already signed in — taking you to your workspace.")
+    ).toBeInTheDocument();
+  });
+});

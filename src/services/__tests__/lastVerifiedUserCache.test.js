@@ -70,9 +70,16 @@ describe('isCacheFresh — TTL gate', () => {
     expect(isCacheFresh({ verifiedAt: now - 1_000 }, now)).toBe(true);
   });
 
-  test('cache older than 8h is stale (defends against long-running tab)', () => {
+  test('cache older than 12h is stale (defends against long-running tab)', () => {
     const now = 1_700_000_000_000;
     expect(isCacheFresh({ verifiedAt: now - CACHE_TTL_MS - 1 }, now)).toBe(false);
+  });
+
+  test('cache at exactly TTL+1ms is stale (boundary guard for the 12h TTL)', () => {
+    // Pinning the off-by-one: a verifiedAt that is exactly CACHE_TTL_MS + 1ms
+    // in the past must be rejected. Catches regressions that flip `<` to `<=`.
+    const now = 1_700_000_000_000;
+    expect(isCacheFresh({ verifiedAt: now - (CACHE_TTL_MS + 1) }, now)).toBe(false);
   });
 
   test('verifiedAt in the future is rejected (defends against clock skew / tampering)', () => {

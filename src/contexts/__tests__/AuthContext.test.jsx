@@ -221,6 +221,34 @@ describe('AuthContext stale-while-revalidate (cached user)', () => {
     expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
   });
 
+  test('background /me 503 AUTH_INFRA_TRANSIENT ⇒ user STAYS, authWarning="RECONNECTING", session preserved', async () => {
+    // The BE returns 503 AUTH_INFRA_TRANSIENT when Supabase JWKS is
+    // temporarily unreachable. The token may be perfectly valid — only
+    // the upstream verifier is sick. The FE must treat this exactly
+    // like a generic 5xx: keep the cached user, show the reconnect
+    // banner, and NOT purge the session.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockRejectedValue({
+      response: {
+        status: 503,
+        data: { error: 'AUTH_INFRA_TRANSIENT', message: 'Identity provider temporarily unreachable.' }
+      }
+    });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    // User is STILL rendered.
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    // No full-screen recovery — reason stays null.
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+    // Cache stays in place — the user was previously verified.
+    expect(localStorage.getItem(CACHE_KEY)).not.toBeNull();
+    // Session was preserved (no purge on transient infra failure).
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+  });
+
   test('background /me 401 ⇒ purges everything (cache, session) and user becomes null', async () => {
     // 401 is authoritative — token is no good. Even with a cached user,
     // we MUST log them out so the next request can't replay the dead
@@ -252,11 +280,13 @@ describe('AuthContext stale-while-revalidate (cached user)', () => {
   });
 
   test('expired cache is ignored — strict foreground boot resumes', async () => {
-    // Seed a cache that's already 9 hours old.
+    // Seed a cache that's already 13 hours old — past the 12h CACHE_TTL_MS.
+    // (Was 9h while TTL was 8h; bumped together with the TTL increase to
+    // keep this test exercising the expired-cache eviction path.)
     const oldUser = { id: 1, role: 'admin', email: 'a@b.com' };
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       user: oldUser,
-      verifiedAt: Date.now() - (9 * 60 * 60 * 1000),
+      verifiedAt: Date.now() - (13 * 60 * 60 * 1000),
       supabaseUserId: 'sb-uuid-1',
       email: 'a@b.com'
     }));
@@ -1072,6 +1102,59 @@ describe('AuthContext race-condition sequencing', () => {
     expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
     // Two /me attempts — first deadline + retry.
     expect(authAPI.me).toHaveBeenCalledTimes(2);
+  });
+
+  test('newer /me 200 from TOKEN_REFRESHED clears an authWarning set by an older transient /me 503', async () => {
+    // Locks the most important user-facing recovery arc:
+    //   1. cached user renders immediately,
+    //   2. background boot /me fails (503) → banner shows,
+    //   3. Supabase fires TOKEN_REFRESHED, that /me succeeds → banner clears.
+    // If this regressed, a transient cold start would leave the banner
+    // sticky even after the BE came back, which is the exact "is the
+    // backend really back?" question users ask.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    let meCallCount = 0;
+    authAPI.me.mockImplementation(() => {
+      meCallCount += 1;
+      if (meCallCount === 1) return Promise.reject({ response: { status: 503 } });
+      return Promise.resolve({ id: 1, role: 'admin', email: 'a@b.com' });
+    });
+    renderApp();
+    // Cached user lands first…
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    // …then the background /me 503 raises the warning.
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('RECONNECTING'));
+    expect(supabaseMod.signOutSupabase).not.toHaveBeenCalled();
+
+    // Newer attempt via TOKEN_REFRESHED succeeds — warning MUST clear.
+    await act(async () => {
+      await supabaseMod.__listeners[0]('TOKEN_REFRESHED', {
+        user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok2'
+      });
+    });
+    await waitFor(() => expect(screen.getByTestId('warning').textContent).toBe('none'));
+    expect(screen.getByTestId('user').textContent).toBe('admin');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
+  });
+
+  test('resolveProfile success path explicitly clears authWarning (even if /me 200 with no prior failure)', async () => {
+    // Belt-and-braces lock on the invariant "authWarning is NEVER set
+    // when /me returns 200". A future refactor that forgot to clear the
+    // warning on success would silently leak a stale banner.
+    seedCache({ id: 1, role: 'admin', email: 'a@b.com' });
+    supabaseMod.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'sb-uuid-1', email: 'a@b.com' }, access_token: 'tok' } }
+    });
+    authAPI.me.mockResolvedValue({ id: 1, role: 'admin', email: 'a@b.com' });
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('user').textContent).toBe('admin'));
+    // Background /me must have run, and the warning must be untouched.
+    await waitFor(() => expect(authAPI.me).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('warning').textContent).toBe('none');
+    expect(screen.getByTestId('reason').textContent).toBe('none');
   });
 
   test('debug logger is silent unless the fmb:authDebug flag is set', async () => {
