@@ -127,7 +127,7 @@ const Login = () => {
             <div className="fmb-login-eyebrow">Sign in</div>
             <h1 className="fmb-login-title">Welcome back.</h1>
             <p className="fmb-login-sub">
-              Use your invited Google account to continue. Access is managed by your state coordinator.
+              Use your invited Google account to continue. Access is managed by Sumit/Satyanshu.
             </p>
           </div>
 
@@ -228,11 +228,11 @@ const Login = () => {
 
         <div className="fmb-login-brand-copy">
           <h2 className="fmb-login-brand-headline">
-            Author one survey.<br />
-            <span className="accent">Reach ten languages.</span>
+            Author surveys in Minutes.<br />
+            <span className="accent">Errorless & Preview available.</span>
           </h2>
           <p className="fmb-login-brand-lede">
-            Build, translate and preview field surveys for FMB programs — with
+            Build, translate and preview field surveys for FMB Bot?mini App with
             schema-driven validation, branching logic, and Excel round-trips.
           </p>
         </div>
